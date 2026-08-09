@@ -14,32 +14,56 @@
 <body>
 <div id="map"></div>
 
+<!-- top: compact status + one gear button -->
 <div id="topbar">
-  <button class="btn primary" id="gpsBtn">▶ GPS</button>
   <div id="status">
     <span class="l1" id="stL1">Sulín Trails</span>
-    <span class="l2" id="stL2">Pick a trail and start GPS</span>
+    <span class="l2" id="stL2">Tap the gear to pick a trail and start GPS</span>
   </div>
+  <button id="gearBtn" class="iconbtn" aria-pressed="false" aria-label="Controls" title="Controls">
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm7.4 3 1.9 1.1-1.9 3.3-2.2-.6a6 6 0 0 1-1.4.8L15 22H11l-.8-2.3a6 6 0 0 1-1.4-.8l-2.2.6-1.9-3.3L6.6 15a6 6 0 0 1 0-1.6L4.7 12.3 6.6 9l2.2.6a6 6 0 0 1 1.4-.8L11 6h4l.8 2.3a6 6 0 0 1 1.4.8L19.4 8.5l1.9 3.3L19.4 13a6 6 0 0 1 0 1.6z"/></svg>
+  </button>
 </div>
 
-<button id="orientBtn" class="btn iconbtn" aria-pressed="false" title="Rotate map to your heading (heading-up / north-up)">
-  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-    <path d="M12 2.5 L18.5 20 L12 15.5 L5.5 20 Z" fill="currentColor"/>
-  </svg></button>
+<!-- one opaque control panel behind the gear -->
+<div id="panel" hidden>
+  <button class="row primary" id="gpsBtn">
+    <span class="ic">▶</span><span class="lbl">Start GPS</span></button>
 
-<button id="compassBtn" class="btn iconbtn" aria-pressed="false" title="Compass">
-  <svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">
-    <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.55"/>
-    <polygon points="12,3.5 15.2,12 8.8,12" fill="#e53935"/>
-    <polygon points="12,20.5 15.2,12 8.8,12" fill="#9aa0ad"/>
-    <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
-  </svg></button>
+  <button class="row" id="trailToggle" aria-expanded="false">
+    <span class="ic">🚵</span><span class="lbl">Trails</span><span class="chev">▾</span></button>
+  <div id="trailList" class="sublist" hidden>Loading…</div>
 
-<button id="recBtn" class="btn iconbtn" aria-pressed="false" title="Record your ride (export GPX)" disabled>
-  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-    <circle cx="12" cy="12" r="7" fill="#c62828"/>
-  </svg></button>
+  <button class="row" id="orientBtn" aria-pressed="false">
+    <span class="ic"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.5 L18.5 20 L12 15.5 L5.5 20 Z" fill="currentColor"/></svg></span>
+    <span class="lbl">Rotate map to heading</span><span class="state"></span></button>
 
+  <button class="row" id="compassBtn" aria-pressed="false">
+    <span class="ic"><svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+      <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.55"/>
+      <polygon points="12,3.5 15.2,12 8.8,12" fill="#e53935"/><polygon points="12,20.5 15.2,12 8.8,12" fill="#9aa0ad"/>
+      <circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg></span>
+    <span class="lbl">Compass</span><span class="state"></span></button>
+
+  <button class="row" id="recBtn" aria-pressed="false" disabled>
+    <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="#c62828"/></svg></span>
+    <span class="lbl">Record ride (GPX)</span><span class="state"></span></button>
+
+  <button class="row" id="elevToggle" aria-pressed="false">
+    <span class="ic">📈</span><span class="lbl">Elevation profile</span><span class="state"></span></button>
+
+  <label class="row selrow">
+    <span class="ic">🗺️</span><span class="lbl">Base map</span>
+    <select id="baseSel">
+      <option value="esri">Satellite</option>
+      <option value="otm">Topographic</option>
+      <option value="freemap">Freemap Outdoor</option>
+      <option value="osm">OpenStreetMap</option>
+    </select>
+  </label>
+</div>
+
+<!-- compass rose widget (opaque, appears when Compass is on) -->
 <div id="compass" hidden aria-live="polite">
   <svg viewBox="0 0 120 120" id="rose">
     <circle cx="60" cy="60" r="56" class="ring"/>
@@ -62,17 +86,12 @@
   <div id="compassRead">—</div>
 </div>
 
-<button id="trailBtn" class="btn" aria-pressed="false">🚵 Trails</button>
-<div id="trailPanel" hidden>
-  <h3>Trails</h3>
-  <div id="trailList">Loading…</div>
-</div>
-
+<!-- elevation profile (opaque; toggled from the panel) -->
 <div id="elevPanel" hidden>
   <div class="eh">
     <b id="elevTitle">Elevation profile</b>
     <span class="meta" id="elevMeta"></span>
-    <span class="x" id="elevClose" role="button" title="Close">✕</span>
+    <span class="x" id="elevClose" role="button" aria-label="Close" title="Close">✕</span>
   </div>
   <div id="elevRead">Drag along the profile</div>
   <svg id="elevSvg" viewBox="0 0 640 110" preserveAspectRatio="none" aria-label="Trail elevation profile"></svg>

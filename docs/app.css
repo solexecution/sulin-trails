@@ -1,49 +1,85 @@
 :root {
   --bg: #f3f2ec; --ink: #1c2016; --muted: #6b7060; --line: #e5e3d8;
   --accent: #2e7d32; --accent-ink: #fff; --user: #c62828;
-  --panel: rgba(255,255,255,0.96);
+  --panel: #ffffff; --panelLine: #e2e0d5;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { font: 15px/1.4 system-ui, -apple-system, sans-serif; color: var(--ink); background: var(--bg); }
 #map { position: fixed; inset: 0; z-index: 0; background: #dcdccf; }
 
-.btn {
-  appearance: none; border: 1px solid var(--line); border-radius: 10px;
-  background: rgba(255,255,255,0.95); color: var(--ink); cursor: pointer;
-  font: 600 13px/1 system-ui, sans-serif; padding: 0 14px; min-height: 44px;
-  box-shadow: 0 1px 5px rgba(0,0,0,0.3);
-}
-.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.btn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
-.btn:disabled { opacity: 0.6; cursor: default; }
-
-/* ---------- top bar ---------- */
+/* ---------- top bar: compact status + gear ---------- */
 #topbar {
   position: fixed; top: 8px; left: 8px; right: 8px; z-index: 1200;
-  display: flex; gap: 8px; align-items: stretch;
+  display: flex; gap: 8px; align-items: stretch; pointer-events: none;
 }
+#topbar > * { pointer-events: auto; }
 #status {
-  flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 12px; padding: 6px 12px; box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+  flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--panelLine);
+  border-radius: 12px; padding: 6px 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.28);
   display: flex; flex-direction: column; justify-content: center;
 }
 #status.inside { background: #e7f3ec; border-color: var(--accent); }
 #status .l1 { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #status .l2 { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ---------- right-side control stack ---------- */
-.iconbtn { display: flex; align-items: center; justify-content: center; }
-#compassBtn { position: fixed; top: 62px; right: 8px; z-index: 1200; width: 44px; padding: 0; }
-#orientBtn  { position: fixed; top: 62px; right: 58px; z-index: 1200; width: 44px; padding: 0; }
-#recBtn     { position: fixed; top: 112px; right: 8px; z-index: 1200; width: 44px; padding: 0; }
+.iconbtn {
+  appearance: none; border: 1px solid var(--panelLine); border-radius: 12px;
+  background: var(--panel); color: var(--ink); cursor: pointer;
+  width: 48px; flex: none; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.28);
+}
+.iconbtn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+#gearBtn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+#gearBtn[aria-pressed="true"] svg { transform: rotate(30deg); transition: transform 0.2s; }
 
-/* ---------- compass widget ---------- */
+/* ---------- one opaque control panel ---------- */
+#panel {
+  position: fixed; top: 62px; right: 8px; z-index: 1300;
+  width: min(280px, calc(100vw - 16px)); max-height: calc(100vh - 76px); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--panelLine); border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.35); padding: 6px;
+}
+#panel[hidden] { display: none; }
+.row {
+  appearance: none; width: 100%; display: flex; align-items: center; gap: 10px;
+  background: none; border: 0; border-radius: 10px; padding: 11px 10px; margin: 0;
+  font: 600 14px system-ui, sans-serif; color: var(--ink); cursor: pointer; text-align: left;
+}
+.row:hover { background: rgba(0,0,0,0.05); }
+.row .ic { width: 24px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.row .lbl { flex: 1; min-width: 0; }
+.row .chev { color: var(--muted); font-size: 12px; }
+.row .state { font-size: 12px; color: var(--accent); font-weight: 700; }
+.row.primary { background: var(--accent); color: var(--accent-ink); margin-bottom: 4px; }
+.row.primary:hover { filter: brightness(1.05); }
+.row[aria-pressed="true"] { background: rgba(46,125,50,0.12); }
+.row[aria-pressed="true"] .state::before { content: "ON"; }
+.row:disabled { opacity: 0.5; cursor: default; }
+.row.selrow { cursor: default; }
+.row.selrow:hover { background: none; }
+#baseSel {
+  appearance: none; border: 1px solid var(--panelLine); border-radius: 8px; background: var(--bg);
+  color: var(--ink); font: 600 13px system-ui; padding: 6px 8px; max-width: 120px;
+}
+.sublist { max-height: 42vh; overflow-y: auto; padding: 2px 2px 6px; }
+.trail-item {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  background: var(--bg); border: 1px solid var(--panelLine); border-radius: 9px;
+  padding: 7px 9px; margin: 4px 0 0; cursor: pointer; font: inherit; color: inherit;
+}
+.trail-item:hover { border-color: var(--accent); }
+.trail-item.active { border-color: var(--accent); background: #eef6ef; }
+.trail-item .sw { width: 12px; height: 12px; border-radius: 4px; flex: none; border: 1px solid rgba(0,0,0,0.2); }
+.trail-item .ti-main { flex: 1; min-width: 0; }
+.trail-item .ti-name { font-weight: 700; font-size: 13px; }
+.trail-item .ti-meta { font-size: 11px; color: var(--muted); }
+
+/* ---------- compass rose widget (opaque) ---------- */
 #compass {
-  position: fixed; top: 112px; right: 58px; z-index: 1200; width: 108px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-  padding: 8px 8px 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.3); text-align: center;
+  position: fixed; top: 62px; left: 8px; z-index: 1150; width: 108px;
+  background: var(--panel); border: 1px solid var(--panelLine); border-radius: 12px;
+  padding: 8px 8px 6px; box-shadow: 0 2px 12px rgba(0,0,0,0.3); text-align: center;
 }
 #compass[hidden] { display: none; }
 #compass svg { width: 92px; height: 92px; display: block; margin: 0 auto; }
@@ -58,39 +94,18 @@ body { font: 15px/1.4 system-ui, -apple-system, sans-serif; color: var(--ink); b
 #compassRead { font: 700 14px/1.1 system-ui; color: var(--ink); margin-top: 3px; font-variant-numeric: tabular-nums; }
 #compassRead small { display: block; font-weight: 500; font-size: 10px; color: var(--muted); }
 
-/* ---------- trail picker ---------- */
-#trailBtn { position: fixed; left: 8px; bottom: 8px; z-index: 1200; }
-#trailPanel {
-  position: fixed; left: 8px; bottom: 60px; z-index: 1250; width: min(340px, calc(100vw - 16px));
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.35); padding: 8px; max-height: 60vh; overflow-y: auto;
-}
-#trailPanel[hidden] { display: none; }
-#trailPanel h3 { margin: 4px 6px 8px; font-size: 14px; }
-.trail-item {
-  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-  background: #fff; border: 1px solid var(--line); border-radius: 10px;
-  padding: 8px 10px; margin-bottom: 6px; cursor: pointer; font: inherit; color: inherit;
-}
-.trail-item:hover { border-color: var(--accent); }
-.trail-item.active { border-color: var(--accent); background: #eef6ef; }
-.trail-item .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; border: 1px solid rgba(0,0,0,0.2); }
-.trail-item .ti-main { flex: 1; min-width: 0; }
-.trail-item .ti-name { font-weight: 700; font-size: 13px; }
-.trail-item .ti-meta { font-size: 11px; color: var(--muted); }
-
-/* ---------- elevation profile ---------- */
+/* ---------- elevation profile (opaque) ---------- */
 #elevPanel {
   position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 1150;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--panelLine); border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.35); padding: 8px 10px 6px;
   max-width: min(720px, calc(100vw - 16px)); margin: 0 auto;
 }
 #elevPanel[hidden] { display: none; }
 #elevPanel .eh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; margin-bottom: 2px; }
-#elevPanel .eh b { font-size: 13px; }
+#elevPanel .eh b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #elevPanel .eh .meta { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-#elevPanel .eh .x { cursor: pointer; padding: 0 4px; color: var(--muted); }
+#elevPanel .eh .x { cursor: pointer; padding: 0 4px; color: var(--muted); font-size: 15px; }
 #elevRead { font: 600 12px/1.2 system-ui; color: var(--ink); font-variant-numeric: tabular-nums; min-height: 16px; margin-bottom: 2px; }
 #elevRead span { color: var(--muted); font-weight: 500; }
 #elevSvg { width: 100%; height: 110px; display: block; touch-action: none; cursor: crosshair; }
@@ -105,7 +120,7 @@ body { font: 15px/1.4 system-ui, -apple-system, sans-serif; color: var(--ink); b
 /* ---------- toast ---------- */
 #toast {
   position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); z-index: 1400;
-  background: rgba(28,32,22,0.95); color: #fff; padding: 10px 16px; border-radius: 10px;
+  background: rgba(28,32,22,0.96); color: #fff; padding: 10px 16px; border-radius: 10px;
   font-size: 13px; max-width: min(420px, calc(100vw - 24px)); box-shadow: 0 2px 12px rgba(0,0,0,0.4);
 }
 #toast[hidden] { display: none; }
@@ -115,18 +130,17 @@ body { font: 15px/1.4 system-ui, -apple-system, sans-serif; color: var(--ink); b
   padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
 .pin-label.start { border-left: 3px solid #1e8228; }
 .pin-label.end { border-left: 3px solid #c62828; }
-.user-glyph { will-change: transform; }
 .user-cone { transition: transform 0.12s linear; transform-origin: 14px 14px; }
 
 .leaflet-control-attribution { font-size: 10px; }
 
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #14160f; --ink: #e8eae3; --muted: #9aa08d; --line: #2a2e28; --panel: rgba(28,32,24,0.96); }
+  :root { --bg: #14160f; --ink: #e8eae3; --muted: #9aa08d; --line: #2a2e28;
+    --panel: #1e2119; --panelLine: #313528; }
   #map { background: #14160f; }
-  .btn { background: rgba(40,44,34,0.95); color: var(--ink); }
-  .trail-item { background: #1e2119; }
-  .trail-item.active { background: #223022; }
   #status.inside { background: #1c3322; }
+  .row:hover { background: rgba(255,255,255,0.06); }
+  .trail-item.active { background: #223022; }
   #compass .ring { fill: rgba(255,255,255,0.04); }
   #elevSvg .grid { stroke: #2a2e28; }
   #elevSvg .tick { fill: #9aa08d; }

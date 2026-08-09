@@ -1,7 +1,7 @@
 'use strict';
 /* Sulín Trails — offline trail-navigation PWA.
-   Trails are data files in ./trails/, listed in ./trails/index.json (built by build.js),
-   so adding a trail = drop a JSON in and rebuild. */
+   Trails are data files in ./trails/, listed in ./trails/index.json (built by build.js).
+   All controls live behind one gear button in a single opaque panel. */
 
 L.Icon.Default.imagePath = 'vendor/images/';
 
@@ -12,24 +12,23 @@ const map = L.map('map', {
 });
 map.setView([49.33, 20.66], 12);
 
-const esri = L.tileLayer(
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  { maxZoom: 20, maxNativeZoom: 19, attribution: 'Esri World Imagery' }).addTo(map);
-const otm = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-  { maxZoom: 17, subdomains: 'abc', attribution: '© OpenTopoMap (CC-BY-SA)' });
-const freemap = L.tileLayer('https://outdoor.tiles.freemap.sk/{z}/{x}/{y}',
-  { maxZoom: 18, attribution: '© Freemap.sk' });
-const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  { maxZoom: 19, attribution: '© OpenStreetMap' });
-L.control.layers({
-  'Satellite (Esri)': esri, 'Topographic (OpenTopoMap)': otm,
-  'Freemap Outdoor': freemap, 'OpenStreetMap': osm,
-}, {}, { collapsed: true, position: 'bottomright' }).addTo(map);
+const BASES = {
+  esri: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 20, maxNativeZoom: 19, attribution: 'Esri World Imagery' }),
+  otm: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    { maxZoom: 17, subdomains: 'abc', attribution: '© OpenTopoMap (CC-BY-SA)' }),
+  freemap: L.tileLayer('https://outdoor.tiles.freemap.sk/{z}/{x}/{y}',
+    { maxZoom: 18, attribution: '© Freemap.sk' }),
+  osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { maxZoom: 19, attribution: '© OpenStreetMap' }),
+};
+let currentBase = BASES.esri.addTo(map);
 
-// ---------- tiny helpers ----------
+// ---------- helpers ----------
 const $ = id => document.getElementById(id);
 const els = {
-  gps: $('gpsBtn'), stL1: $('stL1'), stL2: $('stL2'), status: $('status'),
+  gps: $('gpsBtn'), gpsLbl: $('gpsBtn').querySelector('.lbl'),
+  stL1: $('stL1'), stL2: $('stL2'), status: $('status'),
   rec: $('recBtn'), toast: $('toast'),
 };
 let toastTimer = null;
@@ -47,16 +46,30 @@ const fmtKm = m => m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(2) + ' k
 const CARD8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const cardinal = h => CARD8[Math.round(((h % 360) + 360) % 360 / 45) % 8];
 
+// ---------- one gear panel ----------
+const gearBtn = $('gearBtn'), panel = $('panel');
+function closePanel() { panel.hidden = true; gearBtn.setAttribute('aria-pressed', 'false'); }
+gearBtn.addEventListener('click', () => {
+  const open = panel.hidden; panel.hidden = !open; gearBtn.setAttribute('aria-pressed', String(open));
+});
+
+// base map selector
+$('baseSel').addEventListener('change', e => {
+  const next = BASES[e.target.value]; if (!next) return;
+  map.removeLayer(currentBase); currentBase = next.addTo(map); currentBase.bringToBack();
+});
+
 // ---------- trail registry + rendering ----------
 const trailLayer = L.featureGroup().addTo(map);
-let activeTrail = null;           // loaded trail object
-const trailCache = {};            // id -> trail json
+let activeTrail = null;
+const trailCache = {};
 let registry = [];
 
-const trailBtn = $('trailBtn'), trailPanel = $('trailPanel'), trailList = $('trailList');
-trailBtn.addEventListener('click', () => {
-  const open = trailPanel.hidden; trailPanel.hidden = !open;
-  trailBtn.setAttribute('aria-pressed', String(open));
+const trailToggle = $('trailToggle'), trailList = $('trailList');
+trailToggle.addEventListener('click', () => {
+  const open = trailList.hidden; trailList.hidden = !open;
+  trailToggle.setAttribute('aria-expanded', String(open));
+  trailToggle.querySelector('.chev').textContent = open ? '▴' : '▾';
 });
 
 fetch('trails/index.json')
@@ -70,14 +83,11 @@ function renderTrailList() {
   for (const t of registry) {
     const b = document.createElement('button');
     b.className = 'trail-item' + (activeTrail && activeTrail.id === t.id ? ' active' : '');
-    b.dataset.id = t.id;
-    const meta = [t.km.toString() + ' km',
-      '↑' + t.asc + ' m', (t.desc != null ? '↓' + t.desc + ' m' : null),
-      '~' + t.min + ' min'].filter(Boolean).join(' · ');
+    const meta = [t.km.toString() + ' km', '↑' + t.asc + ' m', (t.desc != null ? '↓' + t.desc + ' m' : null), '~' + t.min + ' min'].filter(Boolean).join(' · ');
     b.innerHTML = '<span class="sw" style="background:' + t.color + '"></span>'
       + '<span class="ti-main"><span class="ti-name">' + (TYPE[t.type] || '') + ' ' + escapeHtml(t.name) + '</span>'
-      + '<span class="ti-meta">' + escapeHtml(t.region) + ' · ' + meta + '</span></span>';
-    b.addEventListener('click', () => { selectTrail(t.id); trailPanel.hidden = true; trailBtn.setAttribute('aria-pressed', 'false'); });
+      + '<span class="ti-meta">' + meta + '</span></span>';
+    b.addEventListener('click', () => selectTrail(t.id));
     trailList.appendChild(b);
   }
 }
@@ -87,8 +97,10 @@ function selectTrail(id) {
   const load = trailCache[id]
     ? Promise.resolve(trailCache[id])
     : fetch('trails/' + id + '.json').then(r => r.json()).then(t => (trailCache[id] = t));
-  load.then(t => { activeTrail = t; drawTrail(t); buildElevation(t); renderTrailList();
-    els.stL1.textContent = t.name; els.stL2.textContent = t.region + ' · ' + t.km.toString() + ' km';
+  load.then(t => {
+    activeTrail = t; drawTrail(t); buildElevation(t); renderTrailList();
+    els.stL1.textContent = t.name; els.stL2.textContent = t.region + ' · ' + t.km.toString() + ' km · ↑' + t.asc + ' m';
+    closePanel();
   }).catch(() => toast('Failed to load the trail.'));
 }
 
@@ -99,9 +111,8 @@ function drawTrail(t) {
   const elevTxt = (t.elevMin != null) ? '<br>' + Math.round(t.elevMin) + '–' + Math.round(t.elevMax) + ' m a.s.l.' : '';
   L.polyline(line, { color: t.color, weight: 4, opacity: 0.97 })
     .bindPopup('<b>' + escapeHtml(t.name) + '</b><br>' + t.region + '<br>'
-      + t.km.toString() + ' km · ↑' + t.asc + ' m'
-      + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ~' + t.min + ' min' + elevTxt).addTo(trailLayer);
-  [['start', t.start, '🏁', '#1e8228'], ['end', t.end, '🎯', '#c62828']].forEach(([role, pt, ic]) => {
+      + t.km.toString() + ' km · ↑' + t.asc + ' m' + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ~' + t.min + ' min' + elevTxt).addTo(trailLayer);
+  [['start', t.start, '🏁'], ['end', t.end, '🎯']].forEach(([role, pt, ic]) => {
     if (!pt) return;
     const el = pt.elev != null ? ' · ' + Math.round(pt.elev) + ' m' : '';
     L.circleMarker([pt.lat, pt.lon], { radius: 7, color: '#fff', weight: 2, fillColor: role === 'start' ? '#1e8228' : '#c62828', fillOpacity: 1 }).addTo(trailLayer);
@@ -111,14 +122,20 @@ function drawTrail(t) {
   map.fitBounds(trailLayer.getBounds().pad(0.12));
 }
 
-// ---------- elevation profile ----------
-const elevPanel = $('elevPanel'), elevSvg = $('elevSvg');
-let elevState = null; // { dist, elev, xOf, yOf, N } for GPS dot projection
-$('elevClose').addEventListener('click', () => { elevPanel.hidden = true; });
+// ---------- elevation profile (opaque, toggled) ----------
+const elevPanel = $('elevPanel'), elevSvg = $('elevSvg'), elevToggle = $('elevToggle');
+let elevState = null, elevWanted = false;
+function refreshElev() { elevPanel.hidden = !(elevWanted && elevState); }
+elevToggle.addEventListener('click', () => {
+  elevWanted = !elevWanted; elevToggle.setAttribute('aria-pressed', String(elevWanted));
+  if (elevWanted && !elevState) toast('This trail has no elevation data.');
+  refreshElev();
+});
+$('elevClose').addEventListener('click', () => { elevWanted = false; elevToggle.setAttribute('aria-pressed', 'false'); refreshElev(); });
 
 function buildElevation(t) {
   elevState = null;
-  if (!t.dist || !t.coords.length || t.coords[0].length < 3 || t.elevMin == null) { elevPanel.hidden = true; return; }
+  if (!t.dist || !t.coords.length || t.coords[0].length < 3 || t.elevMin == null) { refreshElev(); return; }
   const read = $('elevRead'), meta = $('elevMeta'), title = $('elevTitle');
   title.textContent = t.name;
   meta.textContent = t.km.toString() + ' km · ' + Math.round(t.elevMin) + '–' + Math.round(t.elevMax)
@@ -150,10 +167,10 @@ function buildElevation(t) {
     + '<path class="area" d="' + area + '"/><path class="line" d="' + path + '"/>'
     + '<line class="cross" id="elevCross" x1="0" y1="' + pad.t + '" x2="0" y2="' + (pad.t + iH) + '"/>'
     + '<circle class="cdot" id="elevDot" r="4"/><circle class="gpsdot" id="elevGps" r="5"/>';
-  elevPanel.hidden = false;
 
   const cross = $('elevCross'), dot = $('elevDot');
   elevState = { dist, elev, xOf, yOf, N, gps: $('elevGps') };
+  refreshElev();
 
   function nearestIdx(clientX) {
     const rect = elevSvg.getBoundingClientRect();
@@ -184,11 +201,11 @@ function buildElevation(t) {
 const hoverMarker = L.circleMarker([0, 0], { radius: 6, color: '#fff', weight: 2, fillColor: '#2e7d32', fillOpacity: 1, interactive: false });
 
 // ---------- GPS ----------
-let userMarker = null, accCircle = null, watching = false, follow = true, lastHeading = null, watchId = null;
+let userMarker = null, accCircle = null, watching = false, follow = true, lastHeading = null;
 let track = [], trackLine = null, recording = false;
 
 function userGlyphHtml() {
-  return '<svg width="28" height="28" viewBox="0 0 28 28" class="user-glyph">'
+  return '<svg width="28" height="28" viewBox="0 0 28 28">'
     + '<path class="user-cone" d="M14 1 L21 13 A8 8 0 0 0 7 13 Z" fill="rgba(198,40,40,0.4)" opacity="0"/>'
     + '<circle cx="14" cy="14" r="6" fill="#c62828" stroke="#fff" stroke-width="2.5"/></svg>';
 }
@@ -200,7 +217,6 @@ function updateCone() {
   cone.setAttribute('opacity', 1);
   cone.style.transform = 'rotate(' + (lastHeading + map.getBearing()) + 'deg)';
 }
-window.__updateCone = updateCone;
 
 function nearestOnTrail(lat, lon) {
   if (!activeTrail) return null;
@@ -210,17 +226,17 @@ function nearestOnTrail(lat, lon) {
 }
 
 els.gps.addEventListener('click', () => {
-  if (watching) return;
+  if (watching) { closePanel(); return; }
   if (!('geolocation' in navigator)) { toast('This browser does not support GPS.'); return; }
   if (!window.isSecureContext) toast('GPS only works over HTTPS or localhost.', 8000);
-  els.gps.textContent = '⏳ GPS…'; els.gps.disabled = true;
-  watchId = navigator.geolocation.watchPosition(onPos, onGpsErr, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
-  acquireWake();
+  els.gpsLbl.textContent = 'Starting GPS…'; els.gps.disabled = true;
+  navigator.geolocation.watchPosition(onPos, onGpsErr, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+  acquireWake(); closePanel();
 });
 
 function onPos(pos) {
   watching = true;
-  els.gps.textContent = '📍 GPS'; els.gps.disabled = false; els.rec.disabled = false;
+  els.gpsLbl.textContent = 'GPS active'; els.gps.disabled = false; els.rec.disabled = false;
   const lat = pos.coords.latitude, lon = pos.coords.longitude, acc = pos.coords.accuracy || 0;
   const alt = pos.coords.altitude, head = pos.coords.heading;
   if (head != null && !isNaN(head)) { lastHeading = head; if (window.__onHeading) window.__onHeading(((head % 360) + 360) % 360, 'GPS heading'); }
@@ -236,7 +252,6 @@ function onPos(pos) {
   updateCone();
   if (recording) addTrackPoint(lat, lon, alt);
 
-  // status: relationship to the active trail
   const near = nearestOnTrail(lat, lon);
   const parts = [];
   if (alt != null) parts.push(Math.round(alt) + ' m a.s.l.');
@@ -260,26 +275,25 @@ function onPos(pos) {
   els.stL2.textContent = parts.join(' · ') + (head != null && !isNaN(head) ? ' · ' + cardinal(head) + ' ' + Math.round(head) + '°' : '');
 }
 function onGpsErr(err) {
-  els.gps.textContent = '▶ GPS'; els.gps.disabled = false; watching = false;
+  els.gpsLbl.textContent = 'Start GPS'; els.gps.disabled = false; watching = false;
   toast(err.code === 1 ? 'Location access denied. Enable location and try again.' : 'GPS error: ' + err.message, 8000);
 }
 map.on('dragstart', () => { follow = false; });
 map.on('dblclick', () => { follow = true; if (userMarker) map.panTo(userMarker.getLatLng()); });
 
-// ---------- record walk + GPX ----------
+// ---------- record ride + GPX ----------
 function addTrackPoint(lat, lon, ele) {
   const last = track[track.length - 1];
-  if (last && haversine(last[0], last[1], lat, lon) < 3) return; // drop < 3 m jitter
+  if (last && haversine(last[0], last[1], lat, lon) < 3) return;
   track.push([lat, lon, ele, Date.now()]);
   const line = track.map(p => [p[0], p[1]]);
   if (!trackLine) trackLine = L.polyline(line, { color: '#c62828', weight: 3, dashArray: '5 4', opacity: 0.9 }).addTo(map);
   else trackLine.setLatLngs(line);
 }
 els.rec.addEventListener('click', () => {
-  if (!recording) {
-    recording = true; els.rec.setAttribute('aria-pressed', 'true');
-    toast('Recording your track. Tap again to save a GPX.', 4000);
-  } else {
+  if (els.rec.disabled) return;
+  if (!recording) { recording = true; els.rec.setAttribute('aria-pressed', 'true'); toast('Recording your ride. Tap again to save a GPX.', 4000); }
+  else {
     recording = false; els.rec.setAttribute('aria-pressed', 'false');
     if (track.length < 2) { toast('No points to save yet.'); return; }
     exportGpx();
@@ -362,7 +376,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   function aim(b) { target = b; if (!raf) raf = requestAnimationFrame(tick); }
   window.__onHeading = (h, src) => {
     if (h == null) return;
-    lastHeading = h; updateCone();               // cone follows heading in both modes
+    lastHeading = h; updateCone();
     if (mode !== 'heading') return;
     if (smoothed == null) smoothed = h; else { smoothed += delta(smoothed, h) * 0.2; smoothed = ((smoothed % 360) + 360) % 360; }
     aim(BEARING_SIGN * smoothed); follow = true;
