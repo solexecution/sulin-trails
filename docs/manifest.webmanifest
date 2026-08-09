@@ -1,0 +1,15 @@
+{
+  "name": "Sulín Trails — offline turistická navigácia",
+  "short_name": "Sulín Trails",
+  "description": "Offline navigácia po turistických a MTB trasách v okolí Sulína. Kompas, otáčanie mapy podľa smeru, výškový profil, záznam prejdenej trasy.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#14160f",
+  "theme_color": "#2e7d32",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

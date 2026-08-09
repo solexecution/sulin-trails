@@ -1,0 +1,135 @@
+:root {
+  --bg: #f3f2ec; --ink: #1c2016; --muted: #6b7060; --line: #e5e3d8;
+  --accent: #2e7d32; --accent-ink: #fff; --user: #c62828;
+  --panel: rgba(255,255,255,0.96);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font: 15px/1.4 system-ui, -apple-system, sans-serif; color: var(--ink); background: var(--bg); }
+#map { position: fixed; inset: 0; z-index: 0; background: #dcdccf; }
+
+.btn {
+  appearance: none; border: 1px solid var(--line); border-radius: 10px;
+  background: rgba(255,255,255,0.95); color: var(--ink); cursor: pointer;
+  font: 600 13px/1 system-ui, sans-serif; padding: 0 14px; min-height: 44px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.btn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ---------- top bar ---------- */
+#topbar {
+  position: fixed; top: 8px; left: 8px; right: 8px; z-index: 1200;
+  display: flex; gap: 8px; align-items: stretch;
+}
+#status {
+  flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 6px 12px; box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column; justify-content: center;
+}
+#status.inside { background: #e7f3ec; border-color: var(--accent); }
+#status .l1 { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#status .l2 { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- right-side control stack ---------- */
+#compassBtn { position: fixed; top: 62px; right: 8px; z-index: 1200; width: 44px; padding: 0; }
+#orientBtn  { position: fixed; top: 62px; right: 58px; z-index: 1200; width: 44px; padding: 0; font-size: 18px; }
+#orientBtn .oglyph { display: inline-block; }
+#recBtn     { position: fixed; top: 112px; right: 8px; z-index: 1200; width: 44px; padding: 0; font-size: 18px; }
+#recBtn[aria-pressed="true"] { background: var(--user); border-color: var(--user); color: #fff; }
+
+/* ---------- compass widget ---------- */
+#compass {
+  position: fixed; top: 112px; right: 58px; z-index: 1200; width: 108px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px 8px 6px; box-shadow: 0 1px 5px rgba(0,0,0,0.3); text-align: center;
+}
+#compass[hidden] { display: none; }
+#compass svg { width: 92px; height: 92px; display: block; margin: 0 auto; }
+#compass .ring { fill: rgba(0,0,0,0.03); stroke: var(--line); stroke-width: 2; }
+#compass .card { font: 700 13px sans-serif; fill: var(--muted); text-anchor: middle; dominant-baseline: middle; }
+#compass .card.n { fill: var(--user); }
+#compass .tick { stroke: var(--muted); stroke-width: 2; }
+#compass .tick.n { stroke: var(--user); stroke-width: 2.5; }
+#compass .needle-n { fill: var(--user); }
+#compass .needle-s { fill: #9aa0ad; }
+#compass .hub { fill: var(--ink); }
+#compassRead { font: 700 14px/1.1 system-ui; color: var(--ink); margin-top: 3px; font-variant-numeric: tabular-nums; }
+#compassRead small { display: block; font-weight: 500; font-size: 10px; color: var(--muted); }
+
+/* ---------- trail picker ---------- */
+#trailBtn { position: fixed; left: 8px; bottom: 8px; z-index: 1200; }
+#trailPanel {
+  position: fixed; left: 8px; bottom: 60px; z-index: 1250; width: min(340px, calc(100vw - 16px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.35); padding: 8px; max-height: 60vh; overflow-y: auto;
+}
+#trailPanel[hidden] { display: none; }
+#trailPanel h3 { margin: 4px 6px 8px; font-size: 14px; }
+.trail-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; margin-bottom: 6px; cursor: pointer; font: inherit; color: inherit;
+}
+.trail-item:hover { border-color: var(--accent); }
+.trail-item.active { border-color: var(--accent); background: #eef6ef; }
+.trail-item .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; border: 1px solid rgba(0,0,0,0.2); }
+.trail-item .ti-main { flex: 1; min-width: 0; }
+.trail-item .ti-name { font-weight: 700; font-size: 13px; }
+.trail-item .ti-meta { font-size: 11px; color: var(--muted); }
+
+/* ---------- elevation profile ---------- */
+#elevPanel {
+  position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 1150;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.35); padding: 8px 10px 6px;
+  max-width: min(720px, calc(100vw - 16px)); margin: 0 auto;
+}
+#elevPanel[hidden] { display: none; }
+#elevPanel .eh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; margin-bottom: 2px; }
+#elevPanel .eh b { font-size: 13px; }
+#elevPanel .eh .meta { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#elevPanel .eh .x { cursor: pointer; padding: 0 4px; color: var(--muted); }
+#elevRead { font: 600 12px/1.2 system-ui; color: var(--ink); font-variant-numeric: tabular-nums; min-height: 16px; margin-bottom: 2px; }
+#elevRead span { color: var(--muted); font-weight: 500; }
+#elevSvg { width: 100%; height: 110px; display: block; touch-action: none; cursor: crosshair; }
+#elevSvg .area { fill: rgba(46,125,50,0.16); }
+#elevSvg .line { fill: none; stroke: #2e7d32; stroke-width: 2; }
+#elevSvg .grid { stroke: #e5e3d8; stroke-width: 1; }
+#elevSvg .tick { font: 10px system-ui; fill: #6b7060; }
+#elevSvg .cross { stroke: #1c2016; stroke-width: 1; stroke-dasharray: 3 2; opacity: 0; }
+#elevSvg .cdot { fill: #2e7d32; stroke: #fff; stroke-width: 1.5; opacity: 0; }
+#elevSvg .gpsdot { fill: var(--user); stroke: #fff; stroke-width: 1.5; opacity: 0; }
+
+/* ---------- toast ---------- */
+#toast {
+  position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); z-index: 1400;
+  background: rgba(28,32,22,0.95); color: #fff; padding: 10px 16px; border-radius: 10px;
+  font-size: 13px; max-width: min(420px, calc(100vw - 24px)); box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+#toast[hidden] { display: none; }
+
+/* ---------- map glyphs ---------- */
+.pin-label { background: rgba(0,0,0,0.7); color: #fff; font: 600 12px/1.2 sans-serif;
+  padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+.pin-label.start { border-left: 3px solid #1e8228; }
+.pin-label.end { border-left: 3px solid #c62828; }
+.user-glyph { will-change: transform; }
+.user-cone { transition: transform 0.12s linear; transform-origin: 14px 14px; }
+
+.leaflet-control-attribution { font-size: 10px; }
+
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14160f; --ink: #e8eae3; --muted: #9aa08d; --line: #2a2e28; --panel: rgba(28,32,24,0.96); }
+  #map { background: #14160f; }
+  .btn { background: rgba(40,44,34,0.95); color: var(--ink); }
+  .trail-item { background: #1e2119; }
+  .trail-item.active { background: #223022; }
+  #status.inside { background: #1c3322; }
+  #compass .ring { fill: rgba(255,255,255,0.04); }
+  #elevSvg .grid { stroke: #2a2e28; }
+  #elevSvg .tick { fill: #9aa08d; }
+  #elevSvg .cross { stroke: #e8eae3; }
+}

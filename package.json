@@ -1,0 +1,10 @@
+{
+  "name": "sulin-trails",
+  "version": "1.0.0",
+  "description": "Offline trail-navigation PWA for hiking & MTB routes around Sulín (northern Slovakia).",
+  "license": "ISC",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node build.js"
+  }
+}

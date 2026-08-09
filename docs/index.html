@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2e7d32">
+<title>Sulín Trails — offline turistická navigácia</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="map"></div>
+
+<div id="topbar">
+  <button class="btn primary" id="gpsBtn">▶ GPS</button>
+  <div id="status">
+    <span class="l1" id="stL1">Sulín Trails</span>
+    <span class="l2" id="stL2">Vyberte trasu a spustite GPS</span>
+  </div>
+</div>
+
+<button id="orientBtn" class="btn" aria-pressed="false" title="Otáčať mapu podľa smeru chôdze">
+  <span class="oglyph" id="orientGlyph">🧭</span></button>
+<button id="compassBtn" class="btn" aria-pressed="false" title="Kompas">🧭</button>
+<button id="recBtn" class="btn" aria-pressed="false" title="Zaznamenať prejdenú trasu" disabled>⏺</button>
+
+<div id="compass" hidden aria-live="polite">
+  <svg viewBox="0 0 120 120" id="rose">
+    <circle cx="60" cy="60" r="56" class="ring"/>
+    <g id="roseDial">
+      <text x="60" y="20" class="card n">S</text>
+      <text x="102" y="65" class="card">V</text>
+      <text x="60" y="112" class="card">J</text>
+      <text x="18" y="65" class="card">Z</text>
+      <line x1="60" y1="8" x2="60" y2="24" class="tick n"/>
+      <line x1="112" y1="60" x2="96" y2="60" class="tick"/>
+      <line x1="60" y1="112" x2="60" y2="96" class="tick"/>
+      <line x1="8" y1="60" x2="24" y2="60" class="tick"/>
+    </g>
+    <g id="needle" style="transform-origin:60px 60px">
+      <polygon points="60,30 52,64 68,64" class="needle-n"/>
+      <polygon points="60,90 52,64 68,64" class="needle-s"/>
+    </g>
+    <circle cx="60" cy="60" r="4" class="hub"/>
+  </svg>
+  <div id="compassRead">—</div>
+</div>
+
+<button id="trailBtn" class="btn" aria-pressed="false">🥾 Trasy</button>
+<div id="trailPanel" hidden>
+  <h3>Trasy</h3>
+  <div id="trailList">Načítavam…</div>
+</div>
+
+<div id="elevPanel" hidden>
+  <div class="eh">
+    <b id="elevTitle">Výškový profil</b>
+    <span class="meta" id="elevMeta"></span>
+    <span class="x" id="elevClose" role="button" title="Zavrieť">✕</span>
+  </div>
+  <div id="elevRead">Posuňte prstom / myšou po profile</div>
+  <svg id="elevSvg" viewBox="0 0 640 110" preserveAspectRatio="none" aria-label="Výškový profil trasy"></svg>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/leaflet-rotate.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
