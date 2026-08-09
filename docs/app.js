@@ -69,23 +69,23 @@ const trailToggle = $('trailToggle'), trailList = $('trailList');
 trailToggle.addEventListener('click', () => {
   const open = trailList.hidden; trailList.hidden = !open;
   trailToggle.setAttribute('aria-expanded', String(open));
-  trailToggle.querySelector('.chev').textContent = open ? '▴' : '▾';
 });
 
 fetch('trails/index.json')
   .then(r => r.json())
-  .then(list => { registry = list; renderTrailList(); if (list.length) selectTrail(list[0].id); })
+  .then(list => { registry = list; renderTrailList();
+    const def = list.find(t => t.id === 'mtb-sulin-vsetinska') || list[0];
+    if (def) selectTrail(def.id); })
   .catch(() => { trailList.textContent = 'Failed to load the trail list.'; });
 
 function renderTrailList() {
   trailList.innerHTML = '';
-  const TYPE = { mtb: '🚵', hike: '🥾', bike: '🚴', walk: '🚶' };
   for (const t of registry) {
     const b = document.createElement('button');
     b.className = 'trail-item' + (activeTrail && activeTrail.id === t.id ? ' active' : '');
     const meta = [t.km.toString() + ' km', '↑' + t.asc + ' m', (t.desc != null ? '↓' + t.desc + ' m' : null), '~' + t.min + ' min'].filter(Boolean).join(' · ');
     b.innerHTML = '<span class="sw" style="background:' + t.color + '"></span>'
-      + '<span class="ti-main"><span class="ti-name">' + (TYPE[t.type] || '') + ' ' + escapeHtml(t.name) + '</span>'
+      + '<span class="ti-main"><span class="ti-name">' + escapeHtml(t.name) + '</span>'
       + '<span class="ti-meta">' + meta + '</span></span>';
     b.addEventListener('click', () => selectTrail(t.id));
     trailList.appendChild(b);
@@ -112,11 +112,11 @@ function drawTrail(t) {
   L.polyline(line, { color: t.color, weight: 4, opacity: 0.97 })
     .bindPopup('<b>' + escapeHtml(t.name) + '</b><br>' + t.region + '<br>'
       + t.km.toString() + ' km · ↑' + t.asc + ' m' + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ~' + t.min + ' min' + elevTxt).addTo(trailLayer);
-  [['start', t.start, '🏁'], ['end', t.end, '🎯']].forEach(([role, pt, ic]) => {
+  [['start', t.start], ['end', t.end]].forEach(([role, pt]) => {
     if (!pt) return;
     const el = pt.elev != null ? ' · ' + Math.round(pt.elev) + ' m' : '';
-    L.circleMarker([pt.lat, pt.lon], { radius: 7, color: '#fff', weight: 2, fillColor: role === 'start' ? '#1e8228' : '#c62828', fillOpacity: 1 }).addTo(trailLayer);
-    L.marker([pt.lat - 0.0004, pt.lon], { icon: L.divIcon({ className: 'pin-label ' + role, html: ic + ' ' + escapeHtml(pt.name) + el, iconSize: null }) }).addTo(trailLayer);
+    L.circleMarker([pt.lat, pt.lon], { radius: 6, color: '#fff', weight: 2, fillColor: role === 'start' ? '#16a34a' : '#ef4444', fillOpacity: 1 }).addTo(trailLayer);
+    L.marker([pt.lat - 0.0004, pt.lon], { icon: L.divIcon({ className: 'pin-label ' + role, html: escapeHtml(pt.name) + el, iconSize: null }) }).addTo(trailLayer);
   });
   if (map.getBearing()) map.setBearing(0);
   map.fitBounds(trailLayer.getBounds().pad(0.12));
