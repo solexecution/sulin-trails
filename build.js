@@ -43,6 +43,7 @@ const precache = [
   ...vendorImages,
   'trails/index.json',
   ...trailFiles.map(f => 'trails/' + f),
+  ...(fs.existsSync(path.join(DOCS, 'pois.json')) ? ['pois.json'] : []),
 ];
 
 // version hash covers every precached file's content

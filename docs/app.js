@@ -46,6 +46,30 @@ const fmtKm = m => m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(2) + ' k
 const CARD8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const cardinal = h => CARD8[Math.round(((h % 360) + 360) % 360 / 45) % 8];
 
+// shared inline icon set (stroke, currentColor)
+const ICON = {
+  sun: '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>',
+  cloud: '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96 5.5 5.5 0 0 1 10.55-1.3A4 4 0 0 1 17 18H7z"/>',
+  rain: '<path d="M7 15a4 4 0 0 1-.5-7.97 5 5 0 0 1 9.6-1.2A3.5 3.5 0 0 1 18 15"/><path d="M8 17l-1 3M12 17l-1 3M16 17l-1 3"/>',
+  snow: '<path d="M7 15a4 4 0 0 1-.5-7.97 5 5 0 0 1 9.6-1.2A3.5 3.5 0 0 1 18 15"/><path d="M9 18v.01M12 20v.01M15 18v.01"/>',
+  thunder: '<path d="M7 15a4 4 0 0 1-.5-7.97 5 5 0 0 1 9.6-1.2A3.5 3.5 0 0 1 18 15"/><path d="M12 14l-2 3.5h3L11 21"/>',
+  water: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
+  hut: '<path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9"/>',
+  view: '<circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/>',
+  pass: '<path d="M3 18l6-9 4 5 3-4 5 8z"/>',
+};
+function svgIcon(name, cls) {
+  return '<svg class="i' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + ICON[name] + '</svg>';
+}
+function wxSvg(code) {
+  const g = (code === 0 || code === 1) ? 'sun'
+    : (code >= 71 && code <= 77) || code === 85 || code === 86 ? 'snow'
+    : code >= 95 ? 'thunder'
+    : (code >= 51) ? 'rain' : 'cloud';
+  const col = g === 'sun' ? 'wx-sun' : g === 'snow' ? 'wx-snow' : (g === 'rain' || g === 'thunder') ? 'wx-rain' : 'wx-cloud';
+  return svgIcon(g, col);
+}
+
 // ---------- one gear panel ----------
 const gearBtn = $('gearBtn'), panel = $('panel');
 function closePanel() { panel.hidden = true; gearBtn.setAttribute('aria-pressed', 'false'); }
@@ -100,6 +124,7 @@ function selectTrail(id) {
   load.then(t => {
     activeTrail = t; drawTrail(t); buildElevation(t); renderTrailList();
     els.stL1.textContent = t.name; els.stL2.textContent = t.region + ' · ' + t.km.toString() + ' km · ↑' + t.asc + ' m';
+    loadWeatherFor(t);
     closePanel();
   }).catch(() => toast('Failed to load the trail.'));
 }
@@ -392,6 +417,115 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   }
   btn.addEventListener('click', () => setMode(mode === 'heading' ? 'north' : 'heading'));
 })();
+
+// ---------- weather (Open-Meteo — free, no key, cached for offline) ----------
+const WMO = {
+  0: 'Clear', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Rime fog',
+  51: 'Light drizzle', 53: 'Drizzle', 55: 'Dense drizzle', 56: 'Freezing drizzle', 57: 'Freezing drizzle',
+  61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 66: 'Freezing rain', 67: 'Freezing rain',
+  71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 77: 'Snow grains',
+  80: 'Light showers', 81: 'Showers', 82: 'Violent showers', 85: 'Snow showers', 86: 'Snow showers',
+  95: 'Thunderstorm', 96: 'Thunderstorm + hail', 99: 'Severe thunderstorm',
+};
+let wxData = null;
+async function loadWeatherFor(t) {
+  const lat = t.start.lat, lon = t.start.lon, key = 'wx:' + lat.toFixed(2) + ',' + lon.toFixed(2);
+  const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon
+    + '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,relative_humidity_2m'
+    + '&hourly=temperature_2m,precipitation_probability,weather_code'
+    + '&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max'
+    + '&timezone=auto&forecast_days=3&wind_speed_unit=kmh';
+  let payload = null, cached = false, ts = Date.now();
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    payload = await r.json();
+    if (payload && payload.current) localStorage.setItem(key, JSON.stringify({ t: ts, j: payload }));
+  } catch (e) {
+    const s = localStorage.getItem(key);
+    if (s) { const o = JSON.parse(s); payload = o.j; cached = true; ts = o.t; }
+  }
+  if (!payload || !payload.current) return;
+  wxData = { j: payload, cached, ts };
+  renderWx();
+}
+function renderWx() {
+  if (!wxData) return;
+  const j = wxData.j, c = j.current, d = j.daily, H = j.hourly;
+  const hm = s => s.slice(11, 16);
+  $('wxIcon').innerHTML = wxSvg(c.weather_code);
+  $('wxTemp').textContent = Math.round(c.temperature_2m) + '°';
+  $('wxChip').hidden = false;
+
+  const ti = Math.max(0, d.time.indexOf(c.time.slice(0, 10)));
+  const now = new Date(c.time), sr = new Date(d.sunrise[ti]), ss = new Date(d.sunset[ti]);
+  let dl;
+  if (now < sr) dl = 'daylight from ' + hm(d.sunrise[ti]);
+  else if (now < ss) { const m = Math.round((ss - now) / 60000); dl = Math.floor(m / 60) + 'h ' + (m % 60) + 'm daylight left'; }
+  else dl = 'after sunset';
+
+  $('wxTitle').textContent = activeTrail ? activeTrail.region : 'Weather';
+  $('wxAsOf').textContent = (wxData.cached ? 'cached · ' : '') + 'as of ' + hm(c.time);
+  $('wxNow').innerHTML =
+    '<div class="big">' + wxSvg(c.weather_code) + '<span class="t">' + Math.round(c.temperature_2m) + '°</span></div>'
+    + '<div class="side">' + (WMO[c.weather_code] || '') + '<br>Feels <b>' + Math.round(c.apparent_temperature) + '°</b>'
+    + ' · Wind <b>' + Math.round(c.wind_speed_10m) + '</b>–' + Math.round(c.wind_gusts_10m) + ' km/h ' + cardinal(c.wind_direction_10m)
+    + '<br>Humidity <b>' + c.relative_humidity_2m + '%</b> · UV <b>' + Math.round(d.uv_index_max[ti]) + '</b></div>';
+  $('wxSun').innerHTML = '<span>&#9728; <b>' + hm(d.sunrise[ti]) + '</b></span><span>' + dl + '</span><span><b>' + hm(d.sunset[ti]) + '</b> &#9790;</span>';
+
+  let start = H.time.findIndex(x => x.slice(0, 13) >= c.time.slice(0, 13)); if (start < 0) start = 0;
+  let hh = '';
+  for (let i = start; i < Math.min(start + 12, H.time.length); i++)
+    hh += '<div class="h"><div>' + H.time[i].slice(11, 13) + '</div>' + wxSvg(H.weather_code[i])
+      + '<div class="ht">' + Math.round(H.temperature_2m[i]) + '°</div>'
+      + '<div class="hp">' + (H.precipitation_probability[i] >= 20 ? H.precipitation_probability[i] + '%' : '') + '</div></div>';
+  $('wxHourly').innerHTML = hh;
+
+  let dd = '';
+  for (let i = ti; i < Math.min(ti + 3, d.time.length); i++) {
+    const nm = i === ti ? 'Today' : i === ti + 1 ? 'Tomorrow' : new Date(d.time[i]).toLocaleDateString([], { weekday: 'short' });
+    dd += '<div class="d">' + wxSvg(d.weather_code[i]) + '<span class="dn">' + nm + '</span>'
+      + '<span class="dp">' + (d.precipitation_probability_max[i] >= 20 ? d.precipitation_probability_max[i] + '%' : '') + '</span>'
+      + '<span class="dt"><b>' + Math.round(d.temperature_2m_max[i]) + '°</b> <span class="mn">' + Math.round(d.temperature_2m_min[i]) + '°</span></span></div>';
+  }
+  $('wxDaily').innerHTML = dd;
+}
+$('wxChip').addEventListener('click', () => { $('wxPanel').hidden = false; $('wxChip').hidden = true; });
+$('wxClose').addEventListener('click', () => { $('wxPanel').hidden = true; $('wxChip').hidden = false; });
+
+// ---------- rain radar (RainViewer — free) ----------
+let radarLayer = null;
+$('radarBtn').addEventListener('click', async () => {
+  const btn = $('radarBtn');
+  if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; btn.setAttribute('aria-pressed', 'false'); return; }
+  try {
+    const j = await (await fetch('https://api.rainviewer.com/public/weather-maps.json', { signal: AbortSignal.timeout(12000) })).json();
+    const past = j.radar && j.radar.past;
+    if (!past || !past.length) throw new Error('no frames');
+    const f = past[past.length - 1];
+    // RainViewer radar exists only to ~zoom 7; cap native zoom so Leaflet upscales
+    // instead of requesting the "Zoom Level Not Supported" placeholder tiles.
+    radarLayer = L.tileLayer(j.host + f.path + '/256/{z}/{x}/{y}/2/1_1.png', { opacity: 0.6, zIndex: 450, maxNativeZoom: 7, maxZoom: 20, attribution: 'RainViewer' }).addTo(map);
+    btn.setAttribute('aria-pressed', 'true');
+    toast('Rain radar · ' + new Date(f.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 3000);
+  } catch (e) { toast('Rain radar needs a connection.', 4000); }
+});
+
+// ---------- points: water / huts / viewpoints (OSM, precached) ----------
+let poiLayer = null, poisLoaded = null;
+$('poiBtn').addEventListener('click', async () => {
+  const btn = $('poiBtn');
+  if (poiLayer) { map.removeLayer(poiLayer); poiLayer = null; btn.setAttribute('aria-pressed', 'false'); return; }
+  if (!poisLoaded) { try { poisLoaded = await (await fetch('pois.json')).json(); } catch (e) { toast('Points unavailable.'); return; } }
+  const LABEL = { water: 'Drinking water', spring: 'Spring', hut: 'Hut / shelter', viewpoint: 'Viewpoint', pass: 'Pass' };
+  const GLY = { water: 'water', spring: 'water', hut: 'hut', viewpoint: 'view', pass: 'pass' };
+  poiLayer = L.layerGroup();
+  for (const p of poisLoaded) {
+    L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html: '<div class="poi ' + p.t + '">' + svgIcon(GLY[p.t]) + '</div>', iconSize: [24, 24], iconAnchor: [12, 12] }) })
+      .bindPopup('<b>' + (p.n ? escapeHtml(p.n) : LABEL[p.t]) + '</b>' + (p.n ? '<br>' + LABEL[p.t] : '')).addTo(poiLayer);
+  }
+  poiLayer.addTo(map); btn.setAttribute('aria-pressed', 'true');
+  toast(poisLoaded.length + ' points shown', 2500);
+});
 
 // ---------- service worker ----------
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
