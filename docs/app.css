@@ -1,7 +1,7 @@
 :root {
   --bg: #f3f2ec; --ink: #1c2016; --muted: #6b7060; --line: #e5e3d8;
   --accent: #2e7d32; --accent-ink: #fff; --user: #c62828;
-  --frost: rgba(255,255,255,0.84); --frostLine: rgba(0,0,0,0.10);
+  --frost: #ffffff; --frostLine: #d9d7cc;
   --sublist: rgba(0,0,0,0.04);
 }
 * { box-sizing: border-box; }
@@ -10,8 +10,8 @@ body { font: 15px/1.4 system-ui, -apple-system, sans-serif; color: var(--ink); b
 #map { position: fixed; inset: 0; z-index: 0; background: #dcdccf; }
 
 #status, #gearBtn, #panel, #compass, #elevPanel {
-  background: var(--frost); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-  border: 1px solid var(--frostLine); box-shadow: 0 1px 6px rgba(0,0,0,0.22);
+  background: var(--frost);
+  border: 1px solid var(--frostLine); box-shadow: 0 1px 6px rgba(0,0,0,0.28);
 }
 
 /* keep Leaflet zoom control clear, top-left, compact */
@@ -24,7 +24,7 @@ body { font: 15px/1.4 system-ui, -apple-system, sans-serif; color: var(--ink); b
   position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 1200;
   max-width: calc(100vw - 116px); border-radius: 10px; padding: 4px 11px; text-align: center;
 }
-#status.inside { background: rgba(231,243,236,0.9); border-color: var(--accent); }
+#status.inside { background: #e7f3ec; border-color: var(--accent); }
 #status .l1 { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #status .l2 { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -136,9 +136,9 @@ body { font: 15px/1.4 system-ui, -apple-system, sans-serif; color: var(--ink); b
 
 @media (prefers-color-scheme: dark) {
   :root { --bg: #14160f; --ink: #e8eae3; --muted: #9aa08d; --line: #2a2e28;
-    --frost: rgba(22,25,18,0.82); --frostLine: rgba(255,255,255,0.13); --sublist: rgba(255,255,255,0.06); }
+    --frost: #1b1e16; --frostLine: #33372b; --sublist: rgba(255,255,255,0.06); }
   #map { background: #14160f; }
-  #status.inside { background: rgba(28,51,34,0.9); }
+  #status.inside { background: #1c3322; }
   .trail-item.active { background: rgba(46,125,50,0.22); }
   #compass .ring { fill: rgba(255,255,255,0.04); }
   #elevSvg .cross { stroke: #e8eae3; }
