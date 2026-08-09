@@ -29,20 +29,15 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Same-origin (app shell + trail data): cache-first, network fallback,
-  // and the app shell as a last resort for failed navigations while offline.
+  // Same-origin (app shell + trail data): NETWORK-FIRST so a new deploy shows
+  // immediately whenever online; fall back to cache (and the shell) offline.
   if (url.origin === self.location.origin) {
     e.respondWith(
-      caches.match(req, { ignoreSearch: req.mode === 'navigate' }).then(hit => {
-        if (hit) return hit;
-        return fetch(req).then(res => {
-          // opportunistically cache trail JSON fetched after install
-          if (res && res.ok && url.pathname.includes('/trails/')) {
-            const clone = res.clone(); caches.open(SHELL_CACHE).then(c => c.put(req, clone));
-          }
-          return res;
-        }).catch(() => req.mode === 'navigate' ? caches.match('index.html') : Response.error());
-      })
+      fetch(req).then(res => {
+        if (res && res.ok) { const clone = res.clone(); caches.open(SHELL_CACHE).then(c => c.put(req, clone)); }
+        return res;
+      }).catch(() => caches.match(req, { ignoreSearch: req.mode === 'navigate' })
+        .then(hit => hit || (req.mode === 'navigate' ? caches.match('index.html') : Response.error())))
     );
     return;
   }
