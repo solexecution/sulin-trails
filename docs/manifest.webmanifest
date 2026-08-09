@@ -1,7 +1,7 @@
 {
-  "name": "Sulín Trails — offline turistická navigácia",
+  "name": "Sulín Trails — offline trail navigation",
   "short_name": "Sulín Trails",
-  "description": "Offline navigácia po turistických a MTB trasách v okolí Sulína. Kompas, otáčanie mapy podľa smeru, výškový profil, záznam prejdenej trasy.",
+  "description": "Offline navigation for hiking & MTB trails around Sulín (northern Slovakia). Compass, heading-up map rotation, elevation profiles, and ride recording (GPX).",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

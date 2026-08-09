@@ -1,7 +1,7 @@
 // Service worker — full offline capability with content-versioned caches.
-// 640193eb8397 and ["./","index.html","app.css","app.js","manifest.webmanifest","icon-192.png","icon-512.png","vendor/leaflet.js","vendor/leaflet.css","vendor/leaflet-rotate.js","vendor/images/layers-2x.png","vendor/images/layers.png","vendor/images/marker-icon-2x.png","vendor/images/marker-icon.png","vendor/images/marker-shadow.png","trails/index.json","trails/mtb-nestville-ruzbachy.json","trails/mtb-sulin-lubovna.json"] are stamped by build.js from the shell + trail
+// d8eb9bff097e and ["./","index.html","app.css","app.js","manifest.webmanifest","icon-192.png","icon-512.png","vendor/leaflet.js","vendor/leaflet.css","vendor/leaflet-rotate.js","vendor/images/layers-2x.png","vendor/images/layers.png","vendor/images/marker-icon-2x.png","vendor/images/marker-icon.png","vendor/images/marker-shadow.png","trails/index.json","trails/mtb-nestville-ruzbachy.json","trails/mtb-sulin-lubovna.json"] are stamped by build.js from the shell + trail
 // files, so every deploy => new cache name => old shell replaced.
-const VERSION = '640193eb8397';
+const VERSION = 'd8eb9bff097e';
 const SHELL_CACHE = 'shell-' + VERSION;
 const TILE_CACHE = 'tiles-v1'; // map tiles are immutable; keep across versions
 const SHELL = ["./","index.html","app.css","app.js","manifest.webmanifest","icon-192.png","icon-512.png","vendor/leaflet.js","vendor/leaflet.css","vendor/leaflet-rotate.js","vendor/images/layers-2x.png","vendor/images/layers.png","vendor/images/marker-icon-2x.png","vendor/images/marker-icon.png","vendor/images/marker-shadow.png","trails/index.json","trails/mtb-nestville-ruzbachy.json","trails/mtb-sulin-lubovna.json"];

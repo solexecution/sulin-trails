@@ -22,7 +22,7 @@ const freemap = L.tileLayer('https://outdoor.tiles.freemap.sk/{z}/{x}/{y}',
 const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   { maxZoom: 19, attribution: '© OpenStreetMap' });
 L.control.layers({
-  'Satelit (Esri)': esri, 'Turistická (OpenTopoMap)': otm,
+  'Satellite (Esri)': esri, 'Topographic (OpenTopoMap)': otm,
   'Freemap Outdoor': freemap, 'OpenStreetMap': osm,
 }, {}, { collapsed: true, position: 'bottomright' }).addTo(map);
 
@@ -43,8 +43,8 @@ function haversine(aLat, aLon, bLat, bLon) {
   const s = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
 }
-const fmtKm = m => m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(2).replace('.', ',') + ' km';
-const CARD8 = ['S', 'SV', 'V', 'JV', 'J', 'JZ', 'Z', 'SZ'];
+const fmtKm = m => m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(2) + ' km';
+const CARD8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const cardinal = h => CARD8[Math.round(((h % 360) + 360) % 360 / 45) % 8];
 
 // ---------- trail registry + rendering ----------
@@ -62,7 +62,7 @@ trailBtn.addEventListener('click', () => {
 fetch('trails/index.json')
   .then(r => r.json())
   .then(list => { registry = list; renderTrailList(); if (list.length) selectTrail(list[0].id); })
-  .catch(() => { trailList.textContent = 'Nepodarilo sa načítať zoznam trás.'; });
+  .catch(() => { trailList.textContent = 'Failed to load the trail list.'; });
 
 function renderTrailList() {
   trailList.innerHTML = '';
@@ -71,7 +71,7 @@ function renderTrailList() {
     const b = document.createElement('button');
     b.className = 'trail-item' + (activeTrail && activeTrail.id === t.id ? ' active' : '');
     b.dataset.id = t.id;
-    const meta = [t.km.toString().replace('.', ',') + ' km',
+    const meta = [t.km.toString() + ' km',
       '↑' + t.asc + ' m', (t.desc != null ? '↓' + t.desc + ' m' : null),
       '~' + t.min + ' min'].filter(Boolean).join(' · ');
     b.innerHTML = '<span class="sw" style="background:' + t.color + '"></span>'
@@ -88,18 +88,18 @@ function selectTrail(id) {
     ? Promise.resolve(trailCache[id])
     : fetch('trails/' + id + '.json').then(r => r.json()).then(t => (trailCache[id] = t));
   load.then(t => { activeTrail = t; drawTrail(t); buildElevation(t); renderTrailList();
-    els.stL1.textContent = t.name; els.stL2.textContent = t.region + ' · ' + t.km.toString().replace('.', ',') + ' km';
-  }).catch(() => toast('Trasu sa nepodarilo načítať.'));
+    els.stL1.textContent = t.name; els.stL2.textContent = t.region + ' · ' + t.km.toString() + ' km';
+  }).catch(() => toast('Failed to load the trail.'));
 }
 
 function drawTrail(t) {
   trailLayer.clearLayers();
   const line = t.coords.map(c => [c[1], c[0]]);
   L.polyline(line, { color: '#fff', weight: 7, opacity: 0.6 }).addTo(trailLayer);
-  const elevTxt = (t.elevMin != null) ? '<br>' + Math.round(t.elevMin) + '–' + Math.round(t.elevMax) + ' m n.m.' : '';
+  const elevTxt = (t.elevMin != null) ? '<br>' + Math.round(t.elevMin) + '–' + Math.round(t.elevMax) + ' m a.s.l.' : '';
   L.polyline(line, { color: t.color, weight: 4, opacity: 0.97 })
     .bindPopup('<b>' + escapeHtml(t.name) + '</b><br>' + t.region + '<br>'
-      + t.km.toString().replace('.', ',') + ' km · ↑' + t.asc + ' m'
+      + t.km.toString() + ' km · ↑' + t.asc + ' m'
       + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ~' + t.min + ' min' + elevTxt).addTo(trailLayer);
   [['start', t.start, '🏁', '#1e8228'], ['end', t.end, '🎯', '#c62828']].forEach(([role, pt, ic]) => {
     if (!pt) return;
@@ -121,7 +121,7 @@ function buildElevation(t) {
   if (!t.dist || !t.coords.length || t.coords[0].length < 3 || t.elevMin == null) { elevPanel.hidden = true; return; }
   const read = $('elevRead'), meta = $('elevMeta'), title = $('elevTitle');
   title.textContent = t.name;
-  meta.textContent = t.km.toString().replace('.', ',') + ' km · ' + Math.round(t.elevMin) + '–' + Math.round(t.elevMax)
+  meta.textContent = t.km.toString() + ' km · ' + Math.round(t.elevMin) + '–' + Math.round(t.elevMax)
     + ' m · ↑' + t.asc + (t.desc != null ? ' / ↓' + t.desc : '') + ' m';
 
   const N = t.coords.length, elev = t.coords.map(c => c[2]), dist = t.dist;
@@ -167,14 +167,14 @@ function buildElevation(t) {
     cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('opacity', 1);
     dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('opacity', 1);
     const grade = i > 0 ? (elev[i] - elev[i - 1]) / Math.max(1, dist[i] - dist[i - 1]) * 100 : 0;
-    read.innerHTML = '<b>' + Math.round(elev[i]) + ' m n.m.</b> · ' + (dist[i] / 1000).toFixed(2).replace('.', ',')
-      + ' km <span>· sklon ' + (grade >= 0 ? '+' : '') + grade.toFixed(1).replace('.', ',') + ' %</span>';
+    read.innerHTML = '<b>' + Math.round(elev[i]) + ' m a.s.l.</b> · ' + (dist[i] / 1000).toFixed(2)
+      + ' km <span>· grade ' + (grade >= 0 ? '+' : '') + grade.toFixed(1) + ' %</span>';
     const c = activeTrail.coords[i];
     hoverMarker.setLatLng([c[1], c[0]]); if (!map.hasLayer(hoverMarker)) hoverMarker.addTo(map);
   }
   function hideHover() {
     cross.setAttribute('opacity', 0); dot.setAttribute('opacity', 0);
-    read.textContent = 'Posuňte prstom / myšou po profile';
+    read.textContent = 'Drag along the profile';
     if (map.hasLayer(hoverMarker)) map.removeLayer(hoverMarker);
   }
   elevSvg.onpointermove = e => { e.preventDefault(); showAt(nearestIdx(e.clientX)); };
@@ -211,8 +211,8 @@ function nearestOnTrail(lat, lon) {
 
 els.gps.addEventListener('click', () => {
   if (watching) return;
-  if (!('geolocation' in navigator)) { toast('Tento prehliadač nepodporuje GPS.'); return; }
-  if (!window.isSecureContext) toast('GPS funguje len cez HTTPS alebo localhost.', 8000);
+  if (!('geolocation' in navigator)) { toast('This browser does not support GPS.'); return; }
+  if (!window.isSecureContext) toast('GPS only works over HTTPS or localhost.', 8000);
   els.gps.textContent = '⏳ GPS…'; els.gps.disabled = true;
   watchId = navigator.geolocation.watchPosition(onPos, onGpsErr, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
   acquireWake();
@@ -223,7 +223,7 @@ function onPos(pos) {
   els.gps.textContent = '📍 GPS'; els.gps.disabled = false; els.rec.disabled = false;
   const lat = pos.coords.latitude, lon = pos.coords.longitude, acc = pos.coords.accuracy || 0;
   const alt = pos.coords.altitude, head = pos.coords.heading;
-  if (head != null && !isNaN(head)) { lastHeading = head; if (window.__onHeading) window.__onHeading(((head % 360) + 360) % 360, 'smer pohybu (GPS)'); }
+  if (head != null && !isNaN(head)) { lastHeading = head; if (window.__onHeading) window.__onHeading(((head % 360) + 360) % 360, 'GPS heading'); }
 
   if (!userMarker) {
     accCircle = L.circle([lat, lon], { radius: acc, color: '#c62828', weight: 1, fillColor: '#c62828', fillOpacity: 0.12, interactive: false }).addTo(map);
@@ -239,29 +239,29 @@ function onPos(pos) {
   // status: relationship to the active trail
   const near = nearestOnTrail(lat, lon);
   const parts = [];
-  if (alt != null) parts.push(Math.round(alt) + ' m n.m.');
+  if (alt != null) parts.push(Math.round(alt) + ' m a.s.l.');
   parts.push('±' + Math.round(acc) + ' m');
   if (near && activeTrail.dist) {
     const remain = (activeTrail.dist[activeTrail.dist.length - 1] || 0) - activeTrail.dist[near.idx];
     if (near.dist <= 25) {
       els.status.classList.add('inside');
-      els.stL1.textContent = '✔ Na trase · do cieľa ' + fmtKm(remain);
+      els.stL1.textContent = '✔ On trail · ' + fmtKm(remain) + ' to finish';
     } else {
       els.status.classList.remove('inside');
-      els.stL1.textContent = fmtKm(near.dist) + ' od trasy · do cieľa ' + fmtKm(remain);
+      els.stL1.textContent = fmtKm(near.dist) + ' from trail · ' + fmtKm(remain) + ' to finish';
     }
     if (elevState && elevState.gps) {
       const g = elevState.gps, i = near.idx;
       g.setAttribute('cx', elevState.xOf(i)); g.setAttribute('cy', elevState.yOf(elevState.elev[i])); g.setAttribute('opacity', 1);
     }
   } else {
-    els.stL1.textContent = activeTrail ? activeTrail.name : 'GPS aktívne';
+    els.stL1.textContent = activeTrail ? activeTrail.name : 'GPS active';
   }
   els.stL2.textContent = parts.join(' · ') + (head != null && !isNaN(head) ? ' · ' + cardinal(head) + ' ' + Math.round(head) + '°' : '');
 }
 function onGpsErr(err) {
   els.gps.textContent = '▶ GPS'; els.gps.disabled = false; watching = false;
-  toast(err.code === 1 ? 'Prístup k polohe zamietnutý. Povoľte polohu a skúste znova.' : 'GPS chyba: ' + err.message, 8000);
+  toast(err.code === 1 ? 'Location access denied. Enable location and try again.' : 'GPS error: ' + err.message, 8000);
 }
 map.on('dragstart', () => { follow = false; });
 map.on('dblclick', () => { follow = true; if (userMarker) map.panTo(userMarker.getLatLng()); });
@@ -278,10 +278,10 @@ function addTrackPoint(lat, lon, ele) {
 els.rec.addEventListener('click', () => {
   if (!recording) {
     recording = true; els.rec.setAttribute('aria-pressed', 'true');
-    toast('Nahrávam prejdenú trasu. Ťuknite znova pre uloženie GPX.', 4000);
+    toast('Recording your track. Tap again to save a GPX.', 4000);
   } else {
     recording = false; els.rec.setAttribute('aria-pressed', 'false');
-    if (track.length < 2) { toast('Žiadne body na uloženie.'); return; }
+    if (track.length < 2) { toast('No points to save yet.'); return; }
     exportGpx();
   }
 });
@@ -293,10 +293,10 @@ function exportGpx() {
     + '<trk><name>' + escapeHtml(name) + '</name><trkseg>' + seg + '</trkseg></trk></gpx>';
   const url = URL.createObjectURL(new Blob([gpx], { type: 'application/gpx+xml' }));
   const a = document.createElement('a');
-  a.href = url; a.download = 'walk-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.gpx';
+  a.href = url; a.download = 'ride-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.gpx';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
-  toast('GPX uložené (' + track.length + ' bodov).', 4000);
+  toast('GPX saved (' + track.length + ' points).', 4000);
 }
 
 // ---------- screen wake lock ----------
@@ -320,7 +320,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
     else if (e.absolute && typeof e.alpha === 'number') heading = 360 - e.alpha;
     if (heading == null) return;
     const so = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
-    render(heading - so, 'kompas telefónu');
+    render(heading - so, 'phone compass');
   }
   function startSensors() {
     if (listening) return; listening = true;
@@ -330,17 +330,17 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   async function enable() {
     try {
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        if (await DeviceOrientationEvent.requestPermission() !== 'granted') { toast('Prístup ku kompasu zamietnutý.'); return false; }
+        if (await DeviceOrientationEvent.requestPermission() !== 'granted') { toast('Compass access denied.'); return false; }
       }
     } catch (e) { /* not iOS */ }
     startSensors(); return true;
   }
   btn.addEventListener('click', async () => {
     on = !on;
-    if (on) { if (!await enable()) { on = false; return; } box.hidden = false; btn.setAttribute('aria-pressed', 'true'); if (lastGps != null) render(lastGps, 'smer pohybu (GPS)'); }
+    if (on) { if (!await enable()) { on = false; return; } box.hidden = false; btn.setAttribute('aria-pressed', 'true'); if (lastGps != null) render(lastGps, 'GPS heading'); }
     else { box.hidden = true; btn.setAttribute('aria-pressed', 'false'); }
   });
-  window.__compassGps = h => { lastGps = h; if (h == null || listening) return; if (on) render(h, 'smer pohybu (GPS)'); };
+  window.__compassGps = h => { lastGps = h; if (h == null || listening) return; if (on) render(h, 'GPS heading'); };
   window.__ensureHeadingSensors = enable;
 })();
 
@@ -373,7 +373,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
       if (window.__ensureHeadingSensors && !await window.__ensureHeadingSensors()) return;
       mode = 'heading'; btn.setAttribute('aria-pressed', 'true'); follow = true;
       if (userMarker) map.panTo(userMarker.getLatLng());
-      toast('Mapa sa otáča podľa smeru. Ťuknite znova pre „sever hore".', 4000);
+      toast('Map now rotates to your heading. Tap again for north-up.', 4000);
     } else { mode = 'north'; btn.setAttribute('aria-pressed', 'false'); smoothed = null; aim(0); }
   }
   btn.addEventListener('click', () => setMode(mode === 'heading' ? 'north' : 'heading'));
@@ -384,7 +384,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   let reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloading) { reloading = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js').then(reg => {
-    if (!navigator.serviceWorker.controller) toast('Ukladám pre offline použitie…', 4000);
+    if (!navigator.serviceWorker.controller) toast('Saving for offline use…', 4000);
     const promote = w => w && w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) w.postMessage('skipWaiting'); });
     if (reg.waiting && navigator.serviceWorker.controller) reg.waiting.postMessage('skipWaiting');
     reg.addEventListener('updatefound', () => promote(reg.installing));

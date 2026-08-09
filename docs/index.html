@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="sk">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2e7d32">
-<title>Sulín Trails — offline turistická navigácia</title>
+<title>Sulín Trails — offline trail navigation</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -18,23 +18,36 @@
   <button class="btn primary" id="gpsBtn">▶ GPS</button>
   <div id="status">
     <span class="l1" id="stL1">Sulín Trails</span>
-    <span class="l2" id="stL2">Vyberte trasu a spustite GPS</span>
+    <span class="l2" id="stL2">Pick a trail and start GPS</span>
   </div>
 </div>
 
-<button id="orientBtn" class="btn" aria-pressed="false" title="Otáčať mapu podľa smeru chôdze">
-  <span class="oglyph" id="orientGlyph">🧭</span></button>
-<button id="compassBtn" class="btn" aria-pressed="false" title="Kompas">🧭</button>
-<button id="recBtn" class="btn" aria-pressed="false" title="Zaznamenať prejdenú trasu" disabled>⏺</button>
+<button id="orientBtn" class="btn iconbtn" aria-pressed="false" title="Rotate map to your heading (heading-up / north-up)">
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <path d="M12 2.5 L18.5 20 L12 15.5 L5.5 20 Z" fill="currentColor"/>
+  </svg></button>
+
+<button id="compassBtn" class="btn iconbtn" aria-pressed="false" title="Compass">
+  <svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">
+    <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.55"/>
+    <polygon points="12,3.5 15.2,12 8.8,12" fill="#e53935"/>
+    <polygon points="12,20.5 15.2,12 8.8,12" fill="#9aa0ad"/>
+    <circle cx="12" cy="12" r="1.4" fill="currentColor"/>
+  </svg></button>
+
+<button id="recBtn" class="btn iconbtn" aria-pressed="false" title="Record your ride (export GPX)" disabled>
+  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+    <circle cx="12" cy="12" r="7" fill="#c62828"/>
+  </svg></button>
 
 <div id="compass" hidden aria-live="polite">
   <svg viewBox="0 0 120 120" id="rose">
     <circle cx="60" cy="60" r="56" class="ring"/>
     <g id="roseDial">
-      <text x="60" y="20" class="card n">S</text>
-      <text x="102" y="65" class="card">V</text>
-      <text x="60" y="112" class="card">J</text>
-      <text x="18" y="65" class="card">Z</text>
+      <text x="60" y="20" class="card n">N</text>
+      <text x="102" y="65" class="card">E</text>
+      <text x="60" y="112" class="card">S</text>
+      <text x="18" y="65" class="card">W</text>
       <line x1="60" y1="8" x2="60" y2="24" class="tick n"/>
       <line x1="112" y1="60" x2="96" y2="60" class="tick"/>
       <line x1="60" y1="112" x2="60" y2="96" class="tick"/>
@@ -49,20 +62,20 @@
   <div id="compassRead">—</div>
 </div>
 
-<button id="trailBtn" class="btn" aria-pressed="false">🥾 Trasy</button>
+<button id="trailBtn" class="btn" aria-pressed="false">🚵 Trails</button>
 <div id="trailPanel" hidden>
-  <h3>Trasy</h3>
-  <div id="trailList">Načítavam…</div>
+  <h3>Trails</h3>
+  <div id="trailList">Loading…</div>
 </div>
 
 <div id="elevPanel" hidden>
   <div class="eh">
-    <b id="elevTitle">Výškový profil</b>
+    <b id="elevTitle">Elevation profile</b>
     <span class="meta" id="elevMeta"></span>
-    <span class="x" id="elevClose" role="button" title="Zavrieť">✕</span>
+    <span class="x" id="elevClose" role="button" title="Close">✕</span>
   </div>
-  <div id="elevRead">Posuňte prstom / myšou po profile</div>
-  <svg id="elevSvg" viewBox="0 0 640 110" preserveAspectRatio="none" aria-label="Výškový profil trasy"></svg>
+  <div id="elevRead">Drag along the profile</div>
+  <svg id="elevSvg" viewBox="0 0 640 110" preserveAspectRatio="none" aria-label="Trail elevation profile"></svg>
 </div>
 
 <div id="toast" hidden></div>
