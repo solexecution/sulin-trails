@@ -74,9 +74,6 @@ function makeTrail(fromKey, toKey, coords, lengthM, color, asc, desc) {
 }
 
 (async () => {
-  // clear existing trail data (fresh network)
-  for (const f of fs.readdirSync(OUT)) if (f.endsWith('.json') && f !== 'index.json') fs.unlinkSync(path.join(OUT, f));
-
   let n = 0;
   for (const [aKey, bKey, color] of ROUTES) {
     try {

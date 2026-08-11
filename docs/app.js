@@ -92,30 +92,150 @@ let registry = [];
 // route graph derived from the trail registry (ids are mtb-<from>-<to>)
 const startSel = $('startSel'), endSel = $('endSel');
 const startBtn = $('startBtn'), endBtn = $('endBtn');
-let nodeName = {}, adj = {}, routeId = {};
-const NODE_ORDER = ['sulin', 'lackova', 'vsetinska', 'ruzbachy', 'nestville'];
+let nodeName = {}, adj = {}, routeId = {}, routeWeight = {};
+const NODE_ORDER = ['sulin', 'mnisek', 'eliasovka', 'jarabina', 'lubovna', 'vsetinska', 'lackova', 'nestville', 'ruzbachy'];
 const ord = s => { const i = NODE_ORDER.indexOf(s); return i < 0 ? 99 : i; };
 function buildRouteGraph() {
-  nodeName = {}; adj = {}; routeId = {};
+  nodeName = {}; adj = {}; routeId = {}; routeWeight = {};
   for (const t of registry) {
     const p = t.id.split('-'); if (p.length < 3) continue;   // ['mtb', from, to]
     const from = p[1], to = p[2], nm = t.name.split(' → ');
     nodeName[from] = nm[0] || from; nodeName[to] = nm[1] || to;
     (adj[from] = adj[from] || new Set()).add(to);
     (routeId[from] = routeId[from] || {})[to] = t.id;
+    (routeWeight[from] = routeWeight[from] || {})[to] = t.km || 10;
   }
 }
 const opt = slug => '<option value="' + slug + '">' + escapeHtml(nodeName[slug]) + '</option>';
 function fillStart() { startSel.innerHTML = Object.keys(nodeName).sort((a, b) => ord(a) - ord(b)).map(opt).join(''); }
 function fillEnd(start) {
-  const ends = [...(adj[start] || [])].sort((a, b) => ord(a) - ord(b)), prev = endSel.value;
+  const ends = Object.keys(nodeName).filter(k => k !== start).sort((a, b) => ord(a) - ord(b));
+  const prev = endSel.value;
   endSel.innerHTML = ends.map(opt).join('');
   endSel.value = ends.includes(prev) ? prev : ends[0];
   syncTrigger(endSel, endBtn);
 }
+
+function findPath(start, end) {
+  if (start === end) return [];
+  if (routeId[start] && routeId[start][end]) return [routeId[start][end]];
+
+  const dist = {}, prev = {};
+  const nodes = Object.keys(nodeName);
+  for (const n of nodes) dist[n] = Infinity;
+  dist[start] = 0;
+  const unvisited = new Set(nodes);
+
+  while (unvisited.size > 0) {
+    let u = null, minD = Infinity;
+    for (const n of unvisited) {
+      if (dist[n] < minD) { minD = dist[n]; u = n; }
+    }
+    if (u === null || u === end || dist[u] === Infinity) break;
+    unvisited.delete(u);
+
+    for (const v of (adj[u] || [])) {
+      if (!unvisited.has(v)) continue;
+      const w = (routeWeight[u] && routeWeight[u][v]) || 10;
+      const alt = dist[u] + w;
+      if (alt < dist[v]) { dist[v] = alt; prev[v] = u; }
+    }
+  }
+
+  if (dist[end] === Infinity) return [];
+  const nodePath = [];
+  let curr = end;
+  while (curr) { nodePath.unshift(curr); curr = prev[curr]; }
+  const trailIds = [];
+  for (let i = 0; i < nodePath.length - 1; i++) {
+    trailIds.push(routeId[nodePath[i]][nodePath[i + 1]]);
+  }
+  return trailIds;
+}
+
+const cumDistCalc = c => {
+  const d = [0];
+  for (let i = 1; i < c.length; i++) {
+    d[i] = d[i - 1] + haversine(c[i - 1][1], c[i - 1][0], c[i][1], c[i][0]);
+  }
+  return d.map(x => Math.round(x * 10) / 10);
+};
+
+function stitchTrailSegments(segments) {
+  let combinedCoords = [];
+  let combinedAsc = 0, combinedDesc = 0, combinedMin = 0;
+  let elevMin = Infinity, elevMax = -Infinity;
+  let color = segments[0].color;
+  let viaNames = [];
+
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i];
+    combinedAsc += s.asc;
+    combinedDesc += (s.desc != null ? s.desc : 0);
+    combinedMin += s.min;
+    if (s.elevMin != null) elevMin = Math.min(elevMin, s.elevMin);
+    if (s.elevMax != null) elevMax = Math.max(elevMax, s.elevMax);
+    if (i > 0 && i < segments.length) viaNames.push(s.start.name);
+
+    const c = s.coords;
+    if (i === 0) {
+      combinedCoords = combinedCoords.concat(c);
+    } else {
+      combinedCoords = combinedCoords.concat(c.slice(1));
+    }
+  }
+
+  const first = segments[0], last = segments[segments.length - 1];
+  const viaStr = viaNames.length ? ' (via ' + viaNames.join(', ') + ')' : '';
+  const name = first.start.name + ' → ' + last.end.name + viaStr;
+  const dist = cumDistCalc(combinedCoords);
+  const totalM = dist[dist.length - 1] || 0;
+  const km = Math.round(totalM / 100) / 10;
+
+  return {
+    id: `multi-${first.start.name}-${last.end.name}`,
+    name,
+    region: first.region,
+    type: first.type,
+    color,
+    km,
+    asc: Math.round(combinedAsc),
+    desc: Math.round(combinedDesc),
+    min: Math.round(combinedMin),
+    elevMin: elevMin === Infinity ? null : Math.round(elevMin * 10) / 10,
+    elevMax: elevMax === -Infinity ? null : Math.round(elevMax * 10) / 10,
+    start: first.start,
+    end: last.end,
+    coords: combinedCoords,
+    dist,
+  };
+}
+
+function selectRoute(start, end) {
+  if (start === end) return;
+  const pathIds = findPath(start, end);
+  if (!pathIds.length) { toast('No route available.'); return; }
+
+  if (pathIds.length === 1) {
+    selectTrail(pathIds[0]);
+    return;
+  }
+
+  Promise.all(pathIds.map(id =>
+    trailCache[id] ? Promise.resolve(trailCache[id]) : fetch('trails/' + id + '.json').then(r => r.json()).then(t => (trailCache[id] = t))
+  )).then(segments => {
+    const stitched = stitchTrailSegments(segments);
+    activeTrail = stitched;
+    drawTrail(stitched);
+    buildElevation(stitched);
+    els.stL1.textContent = stitched.name;
+    els.stL2.textContent = stitched.region + ' · ' + stitched.km.toString() + ' km · ↑' + stitched.asc + ' m';
+    loadWeatherFor(stitched);
+  }).catch(() => toast('Failed to load route.'));
+}
+
 function pickRoute() {
-  const id = routeId[startSel.value] && routeId[startSel.value][endSel.value];
-  if (id) selectTrail(id);
+  selectRoute(startSel.value, endSel.value);
 }
 startSel.addEventListener('change', () => { fillEnd(startSel.value); pickRoute(); });
 endSel.addEventListener('change', () => { pickRoute(); closePanel(); });
@@ -126,7 +246,7 @@ fetch('trails/index.json')
     registry = list; buildRouteGraph(); fillStart();
     startSel.value = nodeName['sulin'] ? 'sulin' : startSel.options[0].value;
     fillEnd(startSel.value);
-    if ([...(adj[startSel.value] || [])].includes('vsetinska')) endSel.value = 'vsetinska';
+    if (nodeName['vsetinska']) endSel.value = 'vsetinska';
     syncTrigger(startSel, startBtn); syncTrigger(endSel, endBtn);
     pickRoute();
   })
@@ -435,7 +555,6 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
     if (on) { if (!await enable()) { on = false; return; } box.hidden = false; btn.setAttribute('aria-pressed', 'true'); if (lastGps != null) render(lastGps, 'GPS heading'); }
     else { box.hidden = true; btn.setAttribute('aria-pressed', 'false'); }
   });
-  window.__compassGps = h => { lastGps = h; if (h == null || listening) return; if (on) render(h, 'GPS heading'); };
   window.__ensureHeadingSensors = enable;
 })();
 
