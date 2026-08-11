@@ -91,6 +91,7 @@ let registry = [];
 
 // route graph derived from the trail registry (ids are mtb-<from>-<to>)
 const startSel = $('startSel'), endSel = $('endSel');
+const startBtn = $('startBtn'), endBtn = $('endBtn');
 let nodeName = {}, adj = {}, routeId = {};
 const NODE_ORDER = ['sulin', 'lackova', 'vsetinska', 'ruzbachy', 'nestville'];
 const ord = s => { const i = NODE_ORDER.indexOf(s); return i < 0 ? 99 : i; };
@@ -110,6 +111,7 @@ function fillEnd(start) {
   const ends = [...(adj[start] || [])].sort((a, b) => ord(a) - ord(b)), prev = endSel.value;
   endSel.innerHTML = ends.map(opt).join('');
   endSel.value = ends.includes(prev) ? prev : ends[0];
+  syncTrigger(endSel, endBtn);
 }
 function pickRoute() {
   const id = routeId[startSel.value] && routeId[startSel.value][endSel.value];
@@ -125,10 +127,52 @@ fetch('trails/index.json')
     startSel.value = nodeName['sulin'] ? 'sulin' : startSel.options[0].value;
     fillEnd(startSel.value);
     if ([...(adj[startSel.value] || [])].includes('vsetinska')) endSel.value = 'vsetinska';
+    syncTrigger(startSel, startBtn); syncTrigger(endSel, endBtn);
     pickRoute();
   })
   .catch(() => toast('Failed to load trails.'));
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// ---------- custom opaque option picker (replaces native <select> popups) ----------
+const pickOverlay = $('pickOverlay'), pickList = $('pickList'), pickTitle = $('pickTitle');
+let pickSel = null, pickBtn = null;
+function syncTrigger(sel, btn) {
+  if (!sel || !btn) return;
+  const o = sel.options[sel.selectedIndex];
+  btn.textContent = o ? o.textContent : '';
+  btn.disabled = sel.disabled || sel.options.length === 0;
+}
+function closePicker() { pickOverlay.hidden = true; pickSel = null; pickBtn = null; }
+function openPicker(sel, btn, title) {
+  if (btn.disabled) return;
+  pickSel = sel; pickBtn = btn; pickTitle.textContent = title;
+  pickList.innerHTML = '';
+  for (const o of sel.options) {
+    const row = document.createElement('button');
+    row.type = 'button'; row.className = 'pk-opt'; row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', o.value === sel.value ? 'true' : 'false');
+    const lbl = document.createElement('span'); lbl.className = 'pk-lbl'; lbl.textContent = o.textContent;
+    const rad = document.createElement('span'); rad.className = 'pk-radio';
+    row.append(lbl, rad);
+    row.addEventListener('click', () => {
+      if (sel.value !== o.value) { sel.value = o.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+      syncTrigger(sel, btn); closePicker();
+    });
+    pickList.appendChild(row);
+  }
+  pickOverlay.hidden = false;
+}
+function wirePicker(sel, btn, title) {
+  btn.addEventListener('click', () => openPicker(sel, btn, title));
+  sel.addEventListener('change', () => syncTrigger(sel, btn));
+  syncTrigger(sel, btn);
+}
+pickOverlay.addEventListener('click', e => { if (e.target === pickOverlay) closePicker(); });
+$('pickClose').addEventListener('click', closePicker);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pickOverlay.hidden) closePicker(); });
+wirePicker(startSel, startBtn, 'Start point');
+wirePicker(endSel, endBtn, 'End point');
+wirePicker($('baseSel'), $('baseBtn'), 'Base map');
 
 function selectTrail(id) {
   const load = trailCache[id]

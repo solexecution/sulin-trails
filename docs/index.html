@@ -41,8 +41,12 @@
   <div class="sep"></div>
 
   <div class="routebox">
-    <div class="rrow"><span class="rlbl">Start</span><select id="startSel" aria-label="Start point"></select></div>
-    <div class="rrow"><span class="rlbl">End</span><select id="endSel" aria-label="End point"></select></div>
+    <div class="rrow"><span class="rlbl">Start</span>
+      <button type="button" class="pk-trigger" id="startBtn" aria-haspopup="listbox" aria-label="Start point"></button>
+      <select id="startSel" aria-label="Start point" hidden></select></div>
+    <div class="rrow"><span class="rlbl">End</span>
+      <button type="button" class="pk-trigger" id="endBtn" aria-haspopup="listbox" aria-label="End point"></button>
+      <select id="endSel" aria-label="End point" hidden></select></div>
   </div>
 
   <div class="sep"></div>
@@ -73,16 +77,30 @@
 
   <div class="sep"></div>
 
-  <label class="row selrow">
+  <div class="row selrow">
     <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3 3 8 12 13 21 8 12 3"/><polyline points="3 13 12 18 21 13"/></svg></span>
     <span class="lbl">Base map</span>
-    <select id="baseSel">
+    <button type="button" class="pk-trigger" id="baseBtn" aria-haspopup="listbox" aria-label="Base map"></button>
+    <select id="baseSel" hidden>
       <option value="esri">Satellite</option>
       <option value="otm">Topographic</option>
       <option value="freemap">Outdoor</option>
       <option value="osm">Streets</option>
     </select>
-  </label>
+  </div>
+</div>
+
+<!-- option picker (opaque modal, replaces native <select> popups) -->
+<div id="pickOverlay" hidden>
+  <div id="pickModal" role="dialog" aria-modal="true" aria-labelledby="pickTitle">
+    <div class="pk-h">
+      <b id="pickTitle">Select</b>
+      <button class="x" id="pickClose" aria-label="Close">
+        <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="pickList" class="pk-list" role="listbox"></div>
+  </div>
 </div>
 
 <!-- compass rose -->
