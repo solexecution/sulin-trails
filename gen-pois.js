@@ -4,8 +4,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// region bbox covering all four points + trails (s, w, n, e)
-const BBOX = [49.275, 20.545, 49.378, 20.765];
+// region bbox covering all hubs + trails, incl. new N/W reach (Mníšek, Eliášovka, Jarabina)
+const BBOX = [49.275, 20.545, 49.405, 20.765];
 const OVERPASS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
