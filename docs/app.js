@@ -89,32 +89,45 @@ let activeTrail = null;
 const trailCache = {};
 let registry = [];
 
-const trailToggle = $('trailToggle'), trailList = $('trailList');
-trailToggle.addEventListener('click', () => {
-  const open = trailList.hidden; trailList.hidden = !open;
-  trailToggle.setAttribute('aria-expanded', String(open));
-});
+// route graph derived from the trail registry (ids are mtb-<from>-<to>)
+const startSel = $('startSel'), endSel = $('endSel');
+let nodeName = {}, adj = {}, routeId = {};
+const NODE_ORDER = ['sulin', 'lackova', 'vsetinska', 'ruzbachy', 'nestville'];
+const ord = s => { const i = NODE_ORDER.indexOf(s); return i < 0 ? 99 : i; };
+function buildRouteGraph() {
+  nodeName = {}; adj = {}; routeId = {};
+  for (const t of registry) {
+    const p = t.id.split('-'); if (p.length < 3) continue;   // ['mtb', from, to]
+    const from = p[1], to = p[2], nm = t.name.split(' → ');
+    nodeName[from] = nm[0] || from; nodeName[to] = nm[1] || to;
+    (adj[from] = adj[from] || new Set()).add(to);
+    (routeId[from] = routeId[from] || {})[to] = t.id;
+  }
+}
+const opt = slug => '<option value="' + slug + '">' + escapeHtml(nodeName[slug]) + '</option>';
+function fillStart() { startSel.innerHTML = Object.keys(nodeName).sort((a, b) => ord(a) - ord(b)).map(opt).join(''); }
+function fillEnd(start) {
+  const ends = [...(adj[start] || [])].sort((a, b) => ord(a) - ord(b)), prev = endSel.value;
+  endSel.innerHTML = ends.map(opt).join('');
+  endSel.value = ends.includes(prev) ? prev : ends[0];
+}
+function pickRoute() {
+  const id = routeId[startSel.value] && routeId[startSel.value][endSel.value];
+  if (id) selectTrail(id);
+}
+startSel.addEventListener('change', () => { fillEnd(startSel.value); pickRoute(); });
+endSel.addEventListener('change', () => { pickRoute(); closePanel(); });
 
 fetch('trails/index.json')
   .then(r => r.json())
-  .then(list => { registry = list; renderTrailList();
-    const def = list.find(t => t.id === 'mtb-sulin-vsetinska') || list[0];
-    if (def) selectTrail(def.id); })
-  .catch(() => { trailList.textContent = 'Failed to load the trail list.'; });
-
-function renderTrailList() {
-  trailList.innerHTML = '';
-  for (const t of registry) {
-    const b = document.createElement('button');
-    b.className = 'trail-item' + (activeTrail && activeTrail.id === t.id ? ' active' : '');
-    const meta = [t.km.toString() + ' km', '↑' + t.asc + ' m', (t.desc != null ? '↓' + t.desc + ' m' : null), '~' + t.min + ' min'].filter(Boolean).join(' · ');
-    b.innerHTML = '<span class="sw" style="background:' + t.color + '"></span>'
-      + '<span class="ti-main"><span class="ti-name">' + escapeHtml(t.name) + '</span>'
-      + '<span class="ti-meta">' + meta + '</span></span>';
-    b.addEventListener('click', () => selectTrail(t.id));
-    trailList.appendChild(b);
-  }
-}
+  .then(list => {
+    registry = list; buildRouteGraph(); fillStart();
+    startSel.value = nodeName['sulin'] ? 'sulin' : startSel.options[0].value;
+    fillEnd(startSel.value);
+    if ([...(adj[startSel.value] || [])].includes('vsetinska')) endSel.value = 'vsetinska';
+    pickRoute();
+  })
+  .catch(() => toast('Failed to load trails.'));
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 function selectTrail(id) {
@@ -122,10 +135,9 @@ function selectTrail(id) {
     ? Promise.resolve(trailCache[id])
     : fetch('trails/' + id + '.json').then(r => r.json()).then(t => (trailCache[id] = t));
   load.then(t => {
-    activeTrail = t; drawTrail(t); buildElevation(t); renderTrailList();
+    activeTrail = t; drawTrail(t); buildElevation(t);
     els.stL1.textContent = t.name; els.stL2.textContent = t.region + ' · ' + t.km.toString() + ' km · ↑' + t.asc + ' m';
     loadWeatherFor(t);
-    closePanel();
   }).catch(() => toast('Failed to load the trail.'));
 }
 
@@ -427,14 +439,14 @@ const WMO = {
   80: 'Light showers', 81: 'Showers', 82: 'Violent showers', 85: 'Snow showers', 86: 'Snow showers',
   95: 'Thunderstorm', 96: 'Thunderstorm + hail', 99: 'Severe thunderstorm',
 };
-let wxData = null;
+let wxData = null, wxExpanded = false;
 async function loadWeatherFor(t) {
   const lat = t.start.lat, lon = t.start.lon, key = 'wx:' + lat.toFixed(2) + ',' + lon.toFixed(2);
   const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon
-    + '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,relative_humidity_2m'
+    + '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,relative_humidity_2m,surface_pressure,cloud_cover,precipitation,dew_point_2m'
     + '&hourly=temperature_2m,precipitation_probability,weather_code'
-    + '&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max'
-    + '&timezone=auto&forecast_days=3&wind_speed_unit=kmh';
+    + '&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max'
+    + '&timezone=auto&forecast_days=10&wind_speed_unit=kmh';
   let payload = null, cached = false, ts = Date.now();
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
@@ -470,6 +482,18 @@ function renderWx() {
     + '<div class="side">' + (WMO[c.weather_code] || '') + '<br>Feels <b>' + Math.round(c.apparent_temperature) + '°</b>'
     + ' · Wind <b>' + Math.round(c.wind_speed_10m) + '</b>–' + Math.round(c.wind_gusts_10m) + ' km/h ' + cardinal(c.wind_direction_10m)
     + '<br>Humidity <b>' + c.relative_humidity_2m + '%</b> · UV <b>' + Math.round(d.uv_index_max[ti]) + '</b></div>';
+  // expanded analysis block
+  const cell = (k, v) => '<div><span>' + k + '</span><b>' + v + '</b></div>';
+  $('wxMore').hidden = !wxExpanded;
+  $('wxMore').innerHTML = !wxExpanded ? '' : '<div class="wxgrid">'
+    + cell('Pressure', Math.round(c.surface_pressure) + ' hPa')
+    + cell('Cloud', Math.round(c.cloud_cover) + '%')
+    + cell('Dew point', Math.round(c.dew_point_2m) + '°')
+    + cell('Precip now', (c.precipitation || 0) + ' mm')
+    + cell('Rain today', (d.precipitation_sum[ti] || 0).toFixed(1) + ' mm')
+    + cell('Max gust', Math.round(d.wind_gusts_10m_max[ti]) + ' km/h')
+    + '</div>';
+
   $('wxSun').innerHTML = '<span>&#9728; <b>' + hm(d.sunrise[ti]) + '</b></span><span>' + dl + '</span><span><b>' + hm(d.sunset[ti]) + '</b> &#9790;</span>';
 
   let start = H.time.findIndex(x => x.slice(0, 13) >= c.time.slice(0, 13)); if (start < 0) start = 0;
@@ -480,10 +504,12 @@ function renderWx() {
       + '<div class="hp">' + (H.precipitation_probability[i] >= 20 ? H.precipitation_probability[i] + '%' : '') + '</div></div>';
   $('wxHourly').innerHTML = hh;
 
+  const days = Math.min(ti + (wxExpanded ? 10 : 3), d.time.length);
   let dd = '';
-  for (let i = ti; i < Math.min(ti + 3, d.time.length); i++) {
-    const nm = i === ti ? 'Today' : i === ti + 1 ? 'Tomorrow' : new Date(d.time[i]).toLocaleDateString([], { weekday: 'short' });
-    dd += '<div class="d">' + wxSvg(d.weather_code[i]) + '<span class="dn">' + nm + '</span>'
+  for (let i = ti; i < days; i++) {
+    const nm = i === ti ? 'Today' : i === ti + 1 ? 'Tomorrow' : new Date(d.time[i]).toLocaleDateString([], { weekday: 'short', day: 'numeric' });
+    const wind = wxExpanded ? '<span class="dw">' + Math.round(d.wind_speed_10m_max[i]) + ' km/h</span>' : '';
+    dd += '<div class="d">' + wxSvg(d.weather_code[i]) + '<span class="dn">' + nm + '</span>' + wind
       + '<span class="dp">' + (d.precipitation_probability_max[i] >= 20 ? d.precipitation_probability_max[i] + '%' : '') + '</span>'
       + '<span class="dt"><b>' + Math.round(d.temperature_2m_max[i]) + '°</b> <span class="mn">' + Math.round(d.temperature_2m_min[i]) + '°</span></span></div>';
   }
@@ -491,6 +517,7 @@ function renderWx() {
 }
 $('wxChip').addEventListener('click', () => { $('wxPanel').hidden = false; $('wxChip').hidden = true; });
 $('wxClose').addEventListener('click', () => { $('wxPanel').hidden = true; $('wxChip').hidden = false; });
+$('wxExpand').addEventListener('click', () => { wxExpanded = !wxExpanded; $('wxExpand').setAttribute('aria-pressed', String(wxExpanded)); renderWx(); });
 
 // ---------- rain radar (RainViewer — free) ----------
 let radarLayer = null;

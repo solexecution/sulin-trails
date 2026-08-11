@@ -40,10 +40,10 @@
 
   <div class="sep"></div>
 
-  <button class="row" id="trailToggle" aria-expanded="false">
-    <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.4"/><circle cx="18" cy="5" r="2.4"/><path d="M8.4 19H16a3 3 0 0 0 0-6H8a3 3 0 0 1 0-6h7.6"/></svg></span>
-    <span class="lbl">Trails</span><span class="chev" id="trailChev">▾</span></button>
-  <div id="trailList" class="sublist" hidden>Loading…</div>
+  <div class="routebox">
+    <div class="rrow"><span class="rlbl">Start</span><select id="startSel" aria-label="Start point"></select></div>
+    <div class="rrow"><span class="rlbl">End</span><select id="endSel" aria-label="End point"></select></div>
+  </div>
 
   <div class="sep"></div>
 
@@ -107,11 +107,15 @@
 <div id="wxPanel" hidden>
   <div class="wxh">
     <b id="wxTitle">Weather</b><span class="meta" id="wxAsOf"></span>
+    <button class="x" id="wxExpand" aria-label="More detail" aria-pressed="false" title="Full forecast">
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
     <button class="x" id="wxClose" aria-label="Close">
       <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
   <div id="wxNow"></div>
+  <div id="wxMore" hidden></div>
   <div id="wxSun"></div>
   <div id="wxHourly"></div>
   <div id="wxDaily"></div>
