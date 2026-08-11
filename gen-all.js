@@ -1,5 +1,5 @@
 // Generates direct trail routes between all pairs of nodes in the network via BRouter (mtb, 3D).
-// Skips files that already exist to avoid unnecessary network requests.
+// Uses mountain trail via points to ensure routes strictly traverse mountain off-road tracks and avoid motor highways.
 // Usage: node gen-all.js (then: node build.js)
 
 const fs = require('fs');
@@ -18,6 +18,30 @@ const NODES = {
   jarabina:  { name: 'Jarabina',            lon: 20.6560470, lat: 49.3382840 },
   eliasovka: { name: 'Eliášovka 1023',      lon: 20.6425770, lat: 49.4008280 },
   lubovna:   { name: 'Ľubovniansky hrad',   lon: 20.6995470, lat: 49.3152240 },
+};
+
+// Mountain pass / off-road ridge waypoints to force routes off motor highways onto forest trails
+const VIAS = {
+  'lubovna-jarabina': [{ lon: 20.6780, lat: 49.3361 }],
+  'jarabina-lubovna': [{ lon: 20.6780, lat: 49.3361 }],
+  'jarabina-vsetinska': [{ lon: 20.6780, lat: 49.3361 }],
+  'vsetinska-jarabina': [{ lon: 20.6780, lat: 49.3361 }],
+  'lubovna-eliasovka': [{ lon: 20.6780, lat: 49.3361 }],
+  'eliasovka-lubovna': [{ lon: 20.6780, lat: 49.3361 }],
+  'vsetinska-eliasovka': [{ lon: 20.6780, lat: 49.3361 }],
+  'eliasovka-vsetinska': [{ lon: 20.6780, lat: 49.3361 }],
+  'sulin-jarabina': [{ lon: 20.7100, lat: 49.3750 }, { lon: 20.6780, lat: 49.3361 }],
+  'jarabina-sulin': [{ lon: 20.6780, lat: 49.3361 }, { lon: 20.7100, lat: 49.3750 }],
+  'sulin-lubovna': [{ lon: 20.7100, lat: 49.3750 }, { lon: 20.6780, lat: 49.3361 }],
+  'lubovna-sulin': [{ lon: 20.6780, lat: 49.3361 }, { lon: 20.7100, lat: 49.3750 }],
+  'sulin-vsetinska': [{ lon: 20.7100, lat: 49.3750 }],
+  'vsetinska-sulin': [{ lon: 20.7100, lat: 49.3750 }],
+  'sulin-nestville': [{ lon: 20.7100, lat: 49.3750 }],
+  'nestville-sulin': [{ lon: 20.7100, lat: 49.3750 }],
+  'sulin-ruzbachy': [{ lon: 20.7100, lat: 49.3750 }],
+  'ruzbachy-sulin': [{ lon: 20.7100, lat: 49.3750 }],
+  'sulin-lackova': [{ lon: 20.7100, lat: 49.3750 }],
+  'lackova-sulin': [{ lon: 20.7100, lat: 49.3750 }],
 };
 
 const COLORS = [
@@ -45,13 +69,28 @@ function ascDesc(elev) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function brouter(a, b) {
-  const url = `https://brouter.de/brouter?lonlats=${a.lon},${a.lat}|${b.lon},${b.lat}&profile=mtb&alternativeidx=0&format=geojson`;
-  const r = await fetch(url, { signal: AbortSignal.timeout(90000) });
-  const t = await r.text();
-  let j; try { j = JSON.parse(t); } catch { throw new Error(t.slice(0, 120)); }
-  const f = j.features[0];
-  return { coords: f.geometry.coordinates, lengthM: Number(f.properties['track-length']) };
+async function brouter(aKey, bKey) {
+  const a = NODES[aKey], b = NODES[bKey];
+  const viaList = VIAS[`${aKey}-${bKey}`] || [];
+  let pointsStr = `${a.lon},${a.lat}`;
+  for (const v of viaList) pointsStr += `|${v.lon},${v.lat}`;
+  pointsStr += `|${b.lon},${b.lat}`;
+
+  const url = `https://brouter.de/brouter?lonlats=${pointsStr}&profile=mtb&alternativeidx=0&format=geojson`;
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(90000) });
+      const t = await r.text();
+      let j; try { j = JSON.parse(t); } catch { throw new Error(t.slice(0, 120)); }
+      const f = j.features[0];
+      return { coords: f.geometry.coordinates, lengthM: Number(f.properties['track-length']) };
+    } catch (e) {
+      lastErr = e;
+      await sleep(2000);
+    }
+  }
+  throw lastErr;
 }
 
 function makeTrail(fromKey, toKey, coords, lengthM, color, asc, desc) {
@@ -74,7 +113,7 @@ function makeTrail(fromKey, toKey, coords, lengthM, color, asc, desc) {
 
 (async () => {
   const keys = Object.keys(NODES);
-  let created = 0, skipped = 0, failed = 0;
+  let created = 0, failed = 0;
   let colorIdx = 0;
 
   for (let i = 0; i < keys.length; i++) {
@@ -82,22 +121,18 @@ function makeTrail(fromKey, toKey, coords, lengthM, color, asc, desc) {
       const aKey = keys[i], bKey = keys[j];
       const fwdFile = path.join(OUT, `mtb-${aKey}-${bKey}.json`);
       const revFile = path.join(OUT, `mtb-${bKey}-${aKey}.json`);
-
-      if (fs.existsSync(fwdFile) && fs.existsSync(revFile)) {
-        skipped += 2;
-        continue;
-      }
-
       const color = COLORS[colorIdx++ % COLORS.length];
-      console.log(`Fetching ${aKey} ↔ ${bKey}...`);
-      try {
-        const { coords, lengthM } = await brouter(NODES[aKey], NODES[bKey]);
-        const { asc, desc } = ascDesc(coords.map(c => c[2]));
 
-        const fwd = makeTrail(aKey, bKey, coords, lengthM, color, asc, desc);
+      console.log(`Generating off-road route ${aKey} ↔ ${bKey}...`);
+      try {
+        const fwdData = await brouter(aKey, bKey);
+        const fwdAscDesc = ascDesc(fwdData.coords.map(c => c[2]));
+        const fwd = makeTrail(aKey, bKey, fwdData.coords, fwdData.lengthM, color, fwdAscDesc.asc, fwdAscDesc.desc);
         fs.writeFileSync(fwdFile, JSON.stringify(fwd));
 
-        const rev = makeTrail(bKey, aKey, coords.slice().reverse(), lengthM, color, desc, asc);
+        const revData = await brouter(bKey, aKey);
+        const revAscDesc = ascDesc(revData.coords.map(c => c[2]));
+        const rev = makeTrail(bKey, aKey, revData.coords, revData.lengthM, color, revAscDesc.asc, revAscDesc.desc);
         fs.writeFileSync(revFile, JSON.stringify(rev));
 
         created += 2;
@@ -110,5 +145,5 @@ function makeTrail(fromKey, toKey, coords, lengthM, color, asc, desc) {
     }
   }
 
-  console.log(`\nFinished: ${created} created, ${skipped} skipped (already existed), ${failed} failed.`);
+  console.log(`\nFinished: ${created} written, ${failed} failed.`);
 })();
