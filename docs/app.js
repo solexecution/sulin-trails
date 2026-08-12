@@ -720,7 +720,13 @@ $('poiBtn').addEventListener('click', async () => {
 // ---------- service worker ----------
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   let reloading = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloading) { reloading = true; location.reload(); } });
+  // Only reload when an *existing* controller is replaced by an update.
+  // On the very first install there is no controller yet, and skipWaiting()
+  // would otherwise fire controllerchange and reload the page mid-use.
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController && !reloading) { reloading = true; location.reload(); }
+  });
   navigator.serviceWorker.register('sw.js').then(reg => {
     if (!navigator.serviceWorker.controller) toast('Saving for offline use…', 4000);
     const promote = w => w && w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) w.postMessage('skipWaiting'); });
