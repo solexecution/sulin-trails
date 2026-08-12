@@ -282,3 +282,15 @@ body { font: 14px/1.45 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
   .row.primary:hover { background: #1ea468; }
   #compass .ring, #compass .tick { stroke: #2a2e37; }
 }
+
+/* ---- pocket mode: full-black touch guard with dim glanceable status ---- */
+#pocketOverlay {
+  position: fixed; inset: 0; z-index: 3000; background: #000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  touch-action: none; -webkit-user-select: none; user-select: none; cursor: default;
+}
+#pocketOverlay[hidden] { display: none; }
+#pocketClock { font: 700 34px/1 system-ui, sans-serif; color: #2c2c2c; letter-spacing: 0.04em; }
+#pocketStatus { font: 800 26px/1.25 system-ui, sans-serif; color: #234023; text-align: center; padding: 0 24px; white-space: pre-line; }
+#pocketStatus.off { color: #5a1f1f; }
+#pocketHint { position: absolute; bottom: 26px; font: 600 12px/1 system-ui, sans-serif; color: #262626; letter-spacing: 0.05em; }

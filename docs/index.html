@@ -64,6 +64,22 @@
     <span class="ic"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="#ef4444"/></svg></span>
     <span class="lbl">Record ride</span><span class="state"></span></button>
 
+  <button class="row" id="voiceBtn" aria-pressed="false">
+    <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z" fill="currentColor" stroke="none"/><path d="M15 9a4 4 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/></svg></span>
+    <span class="lbl">Voice off-track alerts</span><span class="state"></span></button>
+
+  <button class="row" id="testBtn">
+    <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg></span>
+    <span class="lbl">Test the alert</span></button>
+
+  <button class="row" id="pocketBtn">
+    <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span>
+    <span class="lbl">Pocket mode</span></button>
+
+  <button class="row" id="routeGpxBtn">
+    <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></svg></span>
+    <span class="lbl">Route GPX (for watch apps)</span></button>
+
   <button class="row" id="elevToggle" aria-pressed="false">
     <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19h18M4 19l5-8 3.5 4.5L16 9l4 10"/></svg></span>
     <span class="lbl">Elevation profile</span><span class="state"></span></button>
@@ -151,6 +167,13 @@
   </div>
   <div id="elevRead">Drag along the profile</div>
   <svg id="elevSvg" viewBox="0 0 640 110" preserveAspectRatio="none" aria-label="Trail elevation profile"></svg>
+</div>
+
+<!-- pocket mode: black touch-guard overlay, dim glanceable status -->
+<div id="pocketOverlay" hidden>
+  <div id="pocketClock">--:--</div>
+  <div id="pocketStatus">—</div>
+  <div id="pocketHint">Hold 2 s to exit</div>
 </div>
 
 <div id="toast" hidden></div>

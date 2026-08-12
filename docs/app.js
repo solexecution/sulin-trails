@@ -290,6 +290,7 @@ function chooseRoute(id, fit) {
   const r = routeSet.find(x => x.meta.id === id); if (!r) return;
   selectedRouteId = id;
   const apply = t => {
+    if (activeTrail !== t) resetAlertState(); // don't carry off-track state onto a new route
     activeTrail = t; drawRoutes(fit); buildElevation(t);
     els.stL1.textContent = t.name;
     els.stL2.textContent = (t.source ? t.source + ' · ' : '') + t.km + ' km · ↑' + t.asc + ' m'
@@ -392,6 +393,7 @@ function selectTrail(id) {
     ? Promise.resolve(trailCache[id])
     : fetch('trails/' + id + '.json').then(r => r.json()).then(t => (trailCache[id] = t));
   load.then(t => {
+    if (activeTrail !== t) resetAlertState();
     activeTrail = t; drawTrail(t); buildElevation(t);
     els.stL1.textContent = t.name; els.stL2.textContent = t.region + ' · ' + t.km.toString() + ' km · ↑' + t.asc + ' m';
     loadWeatherFor(t);
@@ -496,7 +498,7 @@ const hoverMarker = L.circleMarker([0, 0], { radius: 6, color: '#fff', weight: 2
 
 // ---------- GPS ----------
 let userMarker = null, accCircle = null, watching = false, follow = true, lastHeading = null;
-let track = [], trackLine = null, recording = false;
+let track = [], trackLine = null, recording = false, geoWatchId = null;
 
 function userGlyphHtml() {
   return '<svg width="28" height="28" viewBox="0 0 28 28">'
@@ -514,9 +516,24 @@ function updateCone() {
 
 function nearestOnTrail(lat, lon) {
   if (!activeTrail) return null;
-  const c = activeTrail.coords; let best = Infinity, bi = 0;
-  for (let i = 0; i < c.length; i++) { const d = haversine(lat, lon, c[i][1], c[i][0]); if (d < best) { best = d; bi = i; } }
-  return { idx: bi, dist: best };
+  const c = activeTrail.coords;
+  if (!c || c.length < 2) return null;
+  // Point-to-segment distance in a local equirectangular projection — vertex-only
+  // distance can overshoot by half the vertex spacing, which matters vs a 40 m alarm.
+  const kx = Math.cos(rad(lat)) * 111320, ky = 110540; // metres per degree of lon / lat
+  const px = lon * kx, py = lat * ky;
+  let best = Infinity, bi = 0;
+  for (let i = 0; i < c.length - 1; i++) {
+    const ax = c[i][0] * kx, ay = c[i][1] * ky;
+    const bx = c[i + 1][0] * kx, by = c[i + 1][1] * ky;
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const qx = ax + t * dx - px, qy = ay + t * dy - py;
+    const d2 = qx * qx + qy * qy;
+    if (d2 < best) { best = d2; bi = t > 0.5 ? i + 1 : i; }
+  }
+  return { idx: bi, dist: Math.sqrt(best) };
 }
 
 els.gps.addEventListener('click', () => {
@@ -524,12 +541,16 @@ els.gps.addEventListener('click', () => {
   if (!('geolocation' in navigator)) { toast('This browser does not support GPS.'); return; }
   if (!window.isSecureContext) toast('GPS only works over HTTPS or localhost.', 8000);
   els.gpsLbl.textContent = 'Starting GPS…'; els.gps.disabled = true;
-  navigator.geolocation.watchPosition(onPos, onGpsErr, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+  if (geoWatchId != null) navigator.geolocation.clearWatch(geoWatchId); // never stack two watches
+  geoWatchId = navigator.geolocation.watchPosition(onPos, onGpsErr, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+  ensureAudio(); // user gesture: unlock beeps + speech for later pocket alerts
   acquireWake(); closePanel();
 });
 
 function onPos(pos) {
   watching = true;
+  lastFixAt = Date.now();
+  if (gpsLost) { gpsLost = false; beep([523, 784], 0.15, 0.6); setTimeout(() => speak('GPS signal back'), 400); }
   els.gpsLbl.textContent = 'GPS active'; els.gps.disabled = false; els.rec.disabled = false;
   const lat = pos.coords.latitude, lon = pos.coords.longitude, acc = pos.coords.accuracy || 0;
   const alt = pos.coords.altitude, head = pos.coords.heading;
@@ -552,12 +573,15 @@ function onPos(pos) {
   parts.push('±' + Math.round(acc) + ' m');
   if (near && activeTrail.dist) {
     const remain = (activeTrail.dist[activeTrail.dist.length - 1] || 0) - activeTrail.dist[near.idx];
+    trackAlert(near.dist, acc); // update off-track state first so the texts below reflect it
     if (near.dist <= 25) {
       els.status.classList.add('inside');
       els.stL1.textContent = '✔ On trail · ' + fmtKm(remain) + ' to finish';
+      pocketSetStatus('✓ ON TRACK\n' + fmtKm(remain) + ' to go', false);
     } else {
       els.status.classList.remove('inside');
       els.stL1.textContent = fmtKm(near.dist) + ' from trail · ' + fmtKm(remain) + ' to finish';
+      pocketSetStatus((offTrack ? 'OFF TRACK\n' : '') + fmtKm(near.dist) + ' from route', offTrack);
     }
     if (elevState && elevState.gps) {
       const g = elevState.gps, i = near.idx;
@@ -565,11 +589,19 @@ function onPos(pos) {
     }
   } else {
     els.stL1.textContent = activeTrail ? activeTrail.name : 'GPS active';
+    pocketSetStatus('GPS active', false);
   }
   els.stL2.textContent = parts.join(' · ') + (head != null && !isNaN(head) ? ' · ' + cardinal(head) + ' ' + Math.round(head) + '°' : '');
 }
 function onGpsErr(err) {
+  if (err.code === 3) {
+    // timeout: the watch is still alive and fixes may resume — announce, don't tear down
+    announceGpsLost('GPS LOST\nno signal');
+    toast('GPS signal lost — still searching…', 6000);
+    return;
+  }
   els.gpsLbl.textContent = 'Start GPS'; els.gps.disabled = false; watching = false;
+  announceGpsLost(err.code === 1 ? 'GPS LOST\nlocation denied' : 'GPS LOST\nno signal');
   toast(err.code === 1 ? 'Location access denied. Enable location and try again.' : 'GPS error: ' + err.message, 8000);
 }
 map.on('dragstart', () => { follow = false; });
@@ -609,8 +641,180 @@ function exportGpx() {
 
 // ---------- screen wake lock ----------
 let wakeLock = null;
-async function acquireWake() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { /* ignore */ } }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && watching && !wakeLock) acquireWake(); });
+async function acquireWake() {
+  try {
+    if (!('wakeLock' in navigator)) return;
+    wakeLock = await navigator.wakeLock.request('screen');
+    // The OS can release the lock at any time (tab hidden, battery saver) — null the
+    // sentinel so the visibilitychange re-acquisition below actually fires.
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (e) { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !wakeLock && (watching || !pocketOverlay.hidden)) acquireWake();
+});
+
+// ---------- off-track voice / sound alerts ----------
+// Off when > OFF_M from the route for OFF_FIXES consecutive good fixes; back when < ON_M
+// (two thresholds so it doesn't flap at the boundary). Fixes with accuracy worse than
+// ACC_MAX_M are ignored — forest-canopy GPS noise must not trigger false alarms.
+const OFF_M = 40, ON_M = 25, OFF_FIXES = 3, REMIND_MS = 25000, ACC_MAX_M = 60;
+let alertsOn = localStorage.getItem('voiceAlerts') !== 'off';
+let audioCtx = null, offTrack = false, offCount = 0, lastRemind = 0;
+let lastFixAt = 0, gpsLost = false;
+const voiceBtn = $('voiceBtn');
+
+function resetAlertState() { offTrack = false; offCount = 0; lastRemind = 0; }
+
+// GPS-loss announcer: pocket text goes red immediately; sound fires once per outage.
+function announceGpsLost(msg) {
+  pocketSetStatus(msg, true);
+  if (gpsLost) return;
+  gpsLost = true;
+  if (alertsOn) {
+    beep([440, 440, 440], 0.3, 0.85);
+    if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
+    setTimeout(() => speak('G P S signal lost'), 900);
+  }
+}
+// Watchdog: Android can simply stop delivering fixes with no error callback (canopy,
+// power saving). No fix for 30 s while watching => audible warning + red pocket status.
+setInterval(() => {
+  if (watching && lastFixAt && Date.now() - lastFixAt > 30000)
+    announceGpsLost('GPS LOST\nno fix for ' + Math.round((Date.now() - lastFixAt) / 1000) + ' s');
+}, 5000);
+
+function ensureAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { /* no audio */ }
+  // warm speech synthesis inside the user gesture so later pocket announcements work
+  try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch (e) { /* ignore */ }
+}
+function beep(freqs, dur, vol) {
+  if (!audioCtx) return;
+  // The context suspends after phone calls / audio-focus loss — resume, then play.
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().then(() => beepNow(freqs, dur, vol)).catch(() => { /* ignore */ });
+    return;
+  }
+  beepNow(freqs, dur, vol);
+}
+function beepNow(freqs, dur, vol) {
+  try {
+    const t0 = audioCtx.currentTime; dur = dur || 0.18; vol = vol || 0.7;
+    freqs.forEach((f, i) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'square'; o.frequency.value = f;
+      const at = t0 + i * (dur + 0.08);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(vol, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(at); o.stop(at + dur + 0.05);
+    });
+  } catch (e) { /* ignore */ }
+}
+function speak(text) {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US'; u.rate = 1.05; u.volume = 1;
+    // Chrome/Android drops utterances queued synchronously after cancel() — defer a beat.
+    setTimeout(() => { try { speechSynthesis.speak(u); } catch (e) { /* ignore */ } }, 80);
+  } catch (e) { /* ignore */ }
+}
+const spokenM = m => m >= 950 ? (Math.round(m / 100) / 10) + ' kilometers' : Math.max(10, Math.round(m / 10) * 10) + ' meters';
+function alertOff(d, again) {
+  beep([880, 660, 440], 0.22, 0.85);
+  if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]);
+  setTimeout(() => speak((again ? 'Still off track, ' : 'Off track, ') + spokenM(d)), 900);
+}
+function alertBack() {
+  beep([523, 784], 0.15, 0.6);
+  if (navigator.vibrate) navigator.vibrate(150);
+  setTimeout(() => speak('Back on track'), 500);
+}
+function trackAlert(d, acc) {
+  if (!alertsOn || d == null || acc > 100) return; // >100 m accuracy = garbage fix, ignore
+  const now = Date.now();
+  // Noise-adjusted trip distance: a 40 m deviation measured with ±50 m accuracy proves
+  // nothing, so the alarm only trips when the deviation exceeds threshold + fix accuracy.
+  const effOff = OFF_M + Math.min(acc, ACC_MAX_M);
+  if (!offTrack) {
+    if (d > effOff) { if (++offCount >= OFF_FIXES) { offTrack = true; lastRemind = now; alertOff(d, false); } }
+    else offCount = 0;
+  } else if (d <= ON_M) {
+    offTrack = false; offCount = 0; alertBack();
+  } else if (now - lastRemind >= REMIND_MS) {
+    lastRemind = now; alertOff(d, true);
+  }
+}
+function syncVoiceBtn() { voiceBtn.setAttribute('aria-pressed', String(alertsOn)); }
+syncVoiceBtn();
+voiceBtn.addEventListener('click', () => {
+  alertsOn = !alertsOn; syncVoiceBtn();
+  localStorage.setItem('voiceAlerts', alertsOn ? 'on' : 'off');
+  offTrack = false; offCount = 0;
+  if (alertsOn) { ensureAudio(); toast('Voice alerts on — you’ll hear a warning when off the route.', 4000); }
+  else toast('Voice alerts off.');
+});
+$('testBtn').addEventListener('click', () => {
+  ensureAudio();
+  setTimeout(() => alertOff(60, false), 150);
+  toast('This is the off-track alert (sample: 60 m).', 4500);
+});
+
+// ---------- pocket mode: black touch-guard overlay ----------
+const pocketOverlay = $('pocketOverlay'), pocketStatus = $('pocketStatus'), pocketClock = $('pocketClock'), pocketHint = $('pocketHint');
+let pocketHold = null, pocketTick = null;
+function pocketSetStatus(text, off) {
+  pocketStatus.textContent = text;
+  pocketStatus.classList.toggle('off', !!off);
+}
+function openPocket() {
+  pocketOverlay.hidden = false;
+  pocketClock.textContent = new Date().toTimeString().slice(0, 5);
+  pocketTick = setInterval(() => { pocketClock.textContent = new Date().toTimeString().slice(0, 5); }, 30000);
+  if (!watching) pocketSetStatus('GPS is not running', true);
+  // fullscreen hides Android's edge gestures (back swipe, notification shade pull)
+  try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {}); } catch (e) { /* ignore */ }
+  acquireWake(); closePanel();
+}
+function closePocket() {
+  pocketOverlay.hidden = true;
+  clearInterval(pocketTick); clearTimeout(pocketHold); pocketHold = null;
+  pocketHint.textContent = 'Hold 2 s to exit';
+  try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) { /* ignore */ }
+}
+$('pocketBtn').addEventListener('click', openPocket);
+pocketOverlay.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  pocketHint.textContent = 'Keep holding…';
+  clearTimeout(pocketHold);
+  pocketHold = setTimeout(closePocket, 2000);
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
+  pocketOverlay.addEventListener(ev, () => { clearTimeout(pocketHold); pocketHold = null; pocketHint.textContent = 'Hold 2 s to exit'; }));
+
+// ---------- route GPX export (for Garmin / Komoot / OsmAnd) ----------
+$('routeGpxBtn').addEventListener('click', () => {
+  const t = activeTrail;
+  if (!t || !t.coords || !t.coords.length) { toast('Pick a route first.'); return; }
+  const seg = t.coords.map(c => '<trkpt lat="' + c[1].toFixed(6) + '" lon="' + c[0].toFixed(6) + '">'
+    + (c[2] != null ? '<ele>' + (+c[2]).toFixed(1) + '</ele>' : '') + '</trkpt>').join('');
+  const nm = t.name + (t.source ? ' — ' + t.source : '');
+  const gpx = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Sulin Trails" xmlns="http://www.topografix.com/GPX/1/1">'
+    + '<trk><name>' + escapeHtml(nm) + '</name><trkseg>' + seg + '</trkseg></trk></gpx>';
+  const url = URL.createObjectURL(new Blob([gpx], { type: 'application/gpx+xml' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = (t.id || 'route') + '.gpx';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('Route GPX saved — import it into Garmin Connect, Komoot or OsmAnd.', 5000);
+});
 
 // ---------- compass widget ----------
 (function () {
