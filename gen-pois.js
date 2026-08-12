@@ -19,6 +19,13 @@ function classify(t) {
   if (t.tourism === 'viewpoint') return 'viewpoint';
   if (t.tourism === 'alpine_hut' || t.tourism === 'wilderness_hut' || t.tourism === 'shelter' || t.amenity === 'shelter') return 'hut';
   if (t.mountain_pass === 'yes' || t.natural === 'saddle') return 'pass';
+  if (['pub', 'restaurant', 'fast_food', 'cafe', 'biergarten'].includes(t.amenity)) return 'food';
+  if (['convenience', 'supermarket', 'bakery', 'greengrocer'].includes(t.shop)) return 'shop';
+  if (t.shop === 'bicycle' || t.amenity === 'bicycle_repair_station') return 'bike';
+  if (t.tourism === 'picnic_site' || t.leisure === 'picnic_table') return 'picnic';
+  if (['castle', 'ruins', 'archaeological_site', 'monastery'].includes(t.historic)) return 'castle';
+  if (t.tourism === 'camp_site') return 'camp';
+  if (t.waterway === 'waterfall') return 'waterfall';
   return null;
 }
 
@@ -41,19 +48,30 @@ async function overpass(q) {
     (
       node["amenity"="drinking_water"](${s},${w},${n},${e});
       node["natural"="spring"](${s},${w},${n},${e});
-      node["tourism"~"^(alpine_hut|wilderness_hut|viewpoint|shelter)$"](${s},${w},${n},${e});
-      node["amenity"="shelter"](${s},${w},${n},${e});
+      node["tourism"~"^(alpine_hut|wilderness_hut|viewpoint|shelter|picnic_site|camp_site)$"](${s},${w},${n},${e});
+      node["amenity"~"^(shelter|pub|restaurant|fast_food|cafe|biergarten|bicycle_repair_station)$"](${s},${w},${n},${e});
       node["natural"="saddle"](${s},${w},${n},${e});
       node["mountain_pass"="yes"](${s},${w},${n},${e});
+      node["shop"~"^(convenience|supermarket|bakery|greengrocer|bicycle)$"](${s},${w},${n},${e});
+      node["historic"~"^(castle|ruins|archaeological_site|monastery)$"](${s},${w},${n},${e});
+      node["leisure"="picnic_table"](${s},${w},${n},${e});
+      node["waterway"="waterfall"](${s},${w},${n},${e});
+      way["historic"~"^(castle|ruins|archaeological_site|monastery)$"](${s},${w},${n},${e});
+      way["tourism"~"^(picnic_site|camp_site)$"](${s},${w},${n},${e});
+      way["amenity"~"^(pub|restaurant|fast_food|cafe)$"](${s},${w},${n},${e});
+      way["shop"~"^(convenience|supermarket)$"](${s},${w},${n},${e});
     );
-    out qt;`;
+    out center qt;`;
   const j = await overpass(q);
   const pois = [];
   for (const el of j.elements) {
-    if (el.type !== 'node' || !el.tags) continue;
+    if (!el.tags) continue;
+    const lat = el.type === 'node' ? el.lat : el.center && el.center.lat;
+    const lon = el.type === 'node' ? el.lon : el.center && el.center.lon;
+    if (lat == null || lon == null) continue;
     const t = classify(el.tags);
     if (!t) continue;
-    pois.push({ t, n: el.tags.name || '', lat: Math.round(el.lat * 1e5) / 1e5, lon: Math.round(el.lon * 1e5) / 1e5 });
+    pois.push({ t, n: el.tags.name || '', lat: Math.round(lat * 1e5) / 1e5, lon: Math.round(lon * 1e5) / 1e5 });
   }
   fs.writeFileSync(path.join(__dirname, 'docs', 'pois.json'), JSON.stringify(pois));
   const by = pois.reduce((a, p) => (a[p.t] = (a[p.t] || 0) + 1, a), {});

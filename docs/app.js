@@ -57,6 +57,12 @@ const ICON = {
   hut: '<path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9"/>',
   view: '<circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/>',
   pass: '<path d="M3 18l6-9 4 5 3-4 5 8z"/>',
+  food: '<path d="M6 3v18M6 3v5a2 2 0 0 0 4 0V3"/><path d="M17 3c-2 2-2.5 5-2.5 7 0 2 1.2 3 2.5 3v8"/>',
+  shop: '<path d="M6 8h12l-1.2 12H7.2L6 8z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/>',
+  bike: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  picnic: '<path d="M3 9h18M7.5 9L4.5 20M16.5 9l3 11M5.5 15h13"/>',
+  castle: '<path d="M5 21V9M19 21V9M5 9V4h3v2h2V4h4v2h2V4h3v5M5 9h14M10 21v-5h4v5"/><path d="M3 21h18"/>',
+  camp: '<path d="M12 4L3 20h18L12 4z"/><path d="M12 11l-4 9M12 11l4 9"/>',
 };
 function svgIcon(name, cls) {
   return '<svg class="i' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + ICON[name] + '</svg>';
@@ -499,6 +505,7 @@ const hoverMarker = L.circleMarker([0, 0], { radius: 6, color: '#fff', weight: 2
 // ---------- GPS ----------
 let userMarker = null, accCircle = null, watching = false, follow = true, lastHeading = null;
 let track = [], trackLine = null, recording = false, geoWatchId = null;
+let lastFixLat = null, lastFixLon = null; // last GPS position (compass trail-arrow)
 
 function userGlyphHtml() {
   return '<svg width="28" height="28" viewBox="0 0 28 28">'
@@ -554,6 +561,8 @@ function onPos(pos) {
   els.gpsLbl.textContent = 'GPS active'; els.gps.disabled = false; els.rec.disabled = false;
   const lat = pos.coords.latitude, lon = pos.coords.longitude, acc = pos.coords.accuracy || 0;
   const alt = pos.coords.altitude, head = pos.coords.heading;
+  lastFixLat = lat; lastFixLon = lon;
+  if (window.__compassFix) window.__compassFix();
   if (head != null && !isNaN(head)) { lastHeading = head; if (window.__onHeading) window.__onHeading(((head % 360) + 360) % 360, 'GPS heading'); }
 
   if (!userMarker) {
@@ -817,15 +826,44 @@ $('routeGpxBtn').addEventListener('click', () => {
 });
 
 // ---------- compass widget ----------
+// Dial + red needle rotate to true north; the green arrow points toward the nearest
+// point of the selected route ("which way back to the trail"), with a text readout.
 (function () {
-  const btn = $('compassBtn'), box = $('compass'), needle = $('needle'), read = $('compassRead');
-  let on = false, listening = false, lastGps = null;
+  const btn = $('compassBtn'), box = $('compass'), needle = $('needle'), dial = $('roseDial'),
+    tArrow = $('trailArrow'), read = $('compassRead'), tRead = $('compassTrail');
+  let on = false, listening = false, lastGps = null, sm = null;
+  const dlt = (a, b) => ((b - a + 540) % 360) - 180;
+  function bearingTo(lat1, lon1, lat2, lon2) {
+    const p1 = rad(lat1), p2 = rad(lat2), dl = rad(lon2 - lon1);
+    const y = Math.sin(dl) * Math.cos(p2);
+    const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+  function trailInfo(h) {
+    if (lastFixLat == null || !activeTrail) { tArrow.setAttribute('opacity', 0); tRead.hidden = true; return; }
+    const near = nearestOnTrail(lastFixLat, lastFixLon);
+    if (!near) { tArrow.setAttribute('opacity', 0); tRead.hidden = true; return; }
+    tRead.hidden = false;
+    if (near.dist < 15) { tArrow.setAttribute('opacity', 0); tRead.textContent = '✓ on the trail'; return; }
+    const p = activeTrail.coords[near.idx];
+    const b = bearingTo(lastFixLat, lastFixLon, p[1], p[0]);
+    tArrow.style.transform = 'rotate(' + (b - h) + 'deg)';
+    tArrow.setAttribute('opacity', 1);
+    const rel = dlt(h, b);
+    const dir = Math.abs(rel) <= 20 ? 'ahead' : Math.abs(rel) >= 160 ? 'behind you' : Math.round(Math.abs(rel)) + '° ' + (rel > 0 ? 'right' : 'left');
+    tRead.textContent = 'trail ' + dir + ' · ' + fmtKm(near.dist);
+  }
   function render(heading, src) {
-    const h = ((heading % 360) + 360) % 360;
-    needle.style.transform = 'rotate(' + h + 'deg)';
-    read.innerHTML = cardinal(h) + ' · ' + Math.round(h) + '°<small>' + src + '</small>';
+    let h = ((heading % 360) + 360) % 360;
+    // shortest-path smoothing so 359°→1° doesn't spin the rose the long way round
+    if (sm == null) sm = h; else sm = ((sm + dlt(sm, h) * 0.3) % 360 + 360) % 360;
+    dial.style.transform = 'rotate(' + (-sm) + 'deg)';
+    needle.style.transform = 'rotate(' + (-sm) + 'deg)';
+    read.innerHTML = cardinal(sm) + ' · ' + Math.round(sm) + '°<small>' + src + '</small>';
+    trailInfo(sm);
     if (window.__onHeading) window.__onHeading(h, src);
   }
+  window.__compassFix = () => { if (!box.hidden && sm != null) trailInfo(sm); };
   function onOrient(e) {
     let heading = null;
     if (typeof e.webkitCompassHeading === 'number') heading = e.webkitCompassHeading;
@@ -857,7 +895,7 @@ $('routeGpxBtn').addEventListener('click', () => {
 
 // ---------- orientation: North-up <-> Heading-up ----------
 (function () {
-  const btn = $('orientBtn'), roseDial = $('roseDial');
+  const btn = $('orientBtn');
   const BEARING_SIGN = -1;
   let mode = 'north', smoothed = null, target = 0, raf = 0;
   const delta = (a, b) => ((b - a + 540) % 360) - 180;
@@ -866,7 +904,6 @@ $('routeGpxBtn').addEventListener('click', () => {
     const cur = map.getBearing(), d = delta(cur, target);
     const next = Math.abs(d) < 0.4 ? target : cur + d * 0.25;
     map.setBearing(next);
-    if (roseDial) roseDial.style.transform = 'rotate(' + next + 'deg)';
     updateCone();
     if (Math.abs(delta(next, target)) > 0.4) raf = requestAnimationFrame(tick);
   }
@@ -993,7 +1030,15 @@ $('radarBtn').addEventListener('click', async () => {
     // instead of requesting the "Zoom Level Not Supported" placeholder tiles.
     radarLayer = L.tileLayer(j.host + f.path + '/256/{z}/{x}/{y}/2/1_1.png', { opacity: 0.6, zIndex: 450, maxNativeZoom: 7, maxZoom: 20, attribution: 'RainViewer' }).addTo(map);
     btn.setAttribute('aria-pressed', 'true');
-    toast('Rain radar · ' + new Date(f.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 3000);
+    const when = new Date(f.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // A dry sky renders fully transparent tiles, which looks broken — probe the three
+    // z7 tiles covering this region and say so explicitly when there's nothing to show.
+    try {
+      const sizes = await Promise.all([[71, 43], [70, 43], [71, 42]].map(([x, y]) =>
+        fetch(j.host + f.path + '/256/7/' + x + '/' + y + '/2/1_1.png').then(r => r.blob()).then(b => b.size).catch(() => 0)));
+      if (Math.max(...sizes) < 1500) toast('Radar on (' + when + ') — no rain around right now, so nothing to see.', 6000);
+      else toast('Rain radar · ' + when, 3000);
+    } catch (e) { toast('Rain radar · ' + when, 3000); }
   } catch (e) { toast('Rain radar needs a connection.', 4000); }
 });
 
@@ -1003,8 +1048,16 @@ $('poiBtn').addEventListener('click', async () => {
   const btn = $('poiBtn');
   if (poiLayer) { map.removeLayer(poiLayer); poiLayer = null; btn.setAttribute('aria-pressed', 'false'); return; }
   if (!poisLoaded) { try { poisLoaded = await (await fetch('pois.json')).json(); } catch (e) { toast('Points unavailable.'); return; } }
-  const LABEL = { water: 'Drinking water', spring: 'Spring', hut: 'Hut / shelter', viewpoint: 'Viewpoint', pass: 'Pass' };
-  const GLY = { water: 'water', spring: 'water', hut: 'hut', viewpoint: 'view', pass: 'pass' };
+  const LABEL = {
+    water: 'Drinking water', spring: 'Spring', hut: 'Hut / shelter', viewpoint: 'Viewpoint', pass: 'Pass',
+    food: 'Food / pub', shop: 'Shop', bike: 'Bike service', picnic: 'Picnic spot',
+    castle: 'Castle / ruins', camp: 'Campsite', waterfall: 'Waterfall',
+  };
+  const GLY = {
+    water: 'water', spring: 'water', hut: 'hut', viewpoint: 'view', pass: 'pass',
+    food: 'food', shop: 'shop', bike: 'bike', picnic: 'picnic',
+    castle: 'castle', camp: 'camp', waterfall: 'water',
+  };
   poiLayer = L.layerGroup();
   for (const p of poisLoaded) {
     L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html: '<div class="poi ' + p.t + '">' + svgIcon(GLY[p.t]) + '</div>', iconSize: [24, 24], iconAnchor: [12, 12] }) })

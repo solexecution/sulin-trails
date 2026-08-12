@@ -27,6 +27,22 @@
   </button>
 </div>
 
+<!-- quick-access map buttons (pulled out of the menu) -->
+<div id="quickbar">
+  <button id="orientBtn" aria-pressed="false" aria-label="Heading-up map" title="Heading-up map">
+    <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 19 21 12 17 5 21 12 2" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <button id="compassBtn" aria-pressed="false" aria-label="Compass" title="Compass">
+    <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><polygon points="15.6 8.4 13.6 13.6 8.4 15.6 10.4 10.4 15.6 8.4" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <button id="radarBtn" aria-pressed="false" aria-label="Rain radar" title="Rain radar">
+    <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15.5a4 4 0 0 1-.5-7.97 5 5 0 0 1 9.6-1.2A3.5 3.5 0 0 1 18 15.5"/><path d="M8 18l-1 2.5M12 18l-1 2.5M16 18l-1 2.5"/></svg>
+  </button>
+  <button id="poiBtn" aria-pressed="false" aria-label="Water · huts · views" title="Water · huts · views">
+    <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+  </button>
+</div>
+
 <!-- weather chip -->
 <button id="wxChip" hidden aria-label="Weather">
   <span id="wxIcon"></span><span id="wxTemp">—</span>
@@ -52,14 +68,6 @@
 
   <div class="sep"></div>
 
-  <button class="row" id="orientBtn" aria-pressed="false">
-    <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 19 21 12 17 5 21 12 2" fill="currentColor" stroke="none"/></svg></span>
-    <span class="lbl">Heading-up map</span><span class="state"></span></button>
-
-  <button class="row" id="compassBtn" aria-pressed="false">
-    <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><polygon points="15.6 8.4 13.6 13.6 8.4 15.6 10.4 10.4 15.6 8.4" fill="currentColor" stroke="none"/></svg></span>
-    <span class="lbl">Compass</span><span class="state"></span></button>
-
   <button class="row" id="recBtn" aria-pressed="false" disabled>
     <span class="ic"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="#ef4444"/></svg></span>
     <span class="lbl">Record ride</span><span class="state"></span></button>
@@ -83,14 +91,6 @@
   <button class="row" id="elevToggle" aria-pressed="false">
     <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19h18M4 19l5-8 3.5 4.5L16 9l4 10"/></svg></span>
     <span class="lbl">Elevation profile</span><span class="state"></span></button>
-
-  <button class="row" id="radarBtn" aria-pressed="false">
-    <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15.5a4 4 0 0 1-.5-7.97 5 5 0 0 1 9.6-1.2A3.5 3.5 0 0 1 18 15.5"/><path d="M8 18l-1 2.5M12 18l-1 2.5M16 18l-1 2.5"/></svg></span>
-    <span class="lbl">Rain radar</span><span class="state"></span></button>
-
-  <button class="row" id="poiBtn" aria-pressed="false">
-    <span class="ic"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
-    <span class="lbl">Water · huts · views</span><span class="state"></span></button>
 
   <div class="sep"></div>
 
@@ -120,22 +120,32 @@
   </div>
 </div>
 
-<!-- compass rose -->
+<!-- compass rose: dial shows true directions, fixed arrow = your facing, green arrow = to the trail -->
 <div id="compass" hidden aria-live="polite">
   <svg viewBox="0 0 120 120" id="rose">
-    <circle cx="60" cy="60" r="56" class="ring"/>
-    <g id="roseDial">
-      <text x="60" y="20" class="card n">N</text><text x="102" y="65" class="card">E</text>
-      <text x="60" y="112" class="card">S</text><text x="18" y="65" class="card">W</text>
-      <line x1="60" y1="8" x2="60" y2="24" class="tick n"/><line x1="112" y1="60" x2="96" y2="60" class="tick"/>
-      <line x1="60" y1="112" x2="60" y2="96" class="tick"/><line x1="8" y1="60" x2="24" y2="60" class="tick"/>
+    <circle cx="60" cy="60" r="54" class="ring"/>
+    <g id="roseDial" style="transform-origin:60px 60px">
+      <text x="60" y="21" class="card n">N</text><text x="101" y="62" class="card">E</text>
+      <text x="60" y="105" class="card">S</text><text x="19" y="62" class="card">W</text>
+      <line x1="60" y1="6" x2="60" y2="14" class="tick n"/><line x1="114" y1="60" x2="106" y2="60" class="tick"/>
+      <line x1="60" y1="114" x2="60" y2="106" class="tick"/><line x1="6" y1="60" x2="14" y2="60" class="tick"/>
+      <g class="minor">
+        <line x1="87" y1="13.2" x2="84" y2="18.4" class="tick m"/><line x1="106.8" y1="33" x2="101.6" y2="36" class="tick m"/>
+        <line x1="106.8" y1="87" x2="101.6" y2="84" class="tick m"/><line x1="87" y1="106.8" x2="84" y2="101.6" class="tick m"/>
+        <line x1="33" y1="106.8" x2="36" y2="101.6" class="tick m"/><line x1="13.2" y1="87" x2="18.4" y2="84" class="tick m"/>
+        <line x1="13.2" y1="33" x2="18.4" y2="36" class="tick m"/><line x1="33" y1="13.2" x2="36" y2="18.4" class="tick m"/>
+      </g>
+    </g>
+    <g id="trailArrow" style="transform-origin:60px 60px" opacity="0">
+      <polygon points="60,18 52,38 60,32 68,38" class="ta"/>
     </g>
     <g id="needle" style="transform-origin:60px 60px">
-      <polygon points="60,30 52,64 68,64" class="needle-n"/><polygon points="60,90 52,64 68,64" class="needle-s"/>
+      <polygon points="60,34 54,62 66,62" class="needle-n"/><polygon points="60,86 54,62 66,62" class="needle-s"/>
     </g>
     <circle cx="60" cy="60" r="4" class="hub"/>
   </svg>
   <div id="compassRead">—</div>
+  <div id="compassTrail" hidden></div>
 </div>
 
 <!-- weather detail -->
