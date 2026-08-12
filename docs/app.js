@@ -29,7 +29,7 @@ const $ = id => document.getElementById(id);
 const els = {
   gps: $('gpsBtn'), gpsLbl: $('gpsBtn').querySelector('.lbl'),
   stL1: $('stL1'), stL2: $('stL2'), status: $('status'),
-  rec: $('recBtn'), toast: $('toast'),
+  rec: $('recBtn'), toast: $('toast'), routeList: $('routeList'),
 };
 let toastTimer = null;
 function toast(msg, ms = 3500) {
@@ -92,20 +92,33 @@ let registry = [];
 // route graph derived from the trail registry (ids are mtb-<from>-<to>)
 const startSel = $('startSel'), endSel = $('endSel');
 const startBtn = $('startBtn'), endBtn = $('endBtn');
-let nodeName = {}, adj = {}, routeId = {}, routeWeight = {};
+let nodeName = {}, adj = {}, routeId = {}, routeWeight = {}, variants = {};
 const NODE_ORDER = ['sulin', 'mnisek', 'eliasovka', 'jarabina', 'lubovna', 'vsetinska', 'lackova', 'nestville', 'ruzbachy'];
 const ord = s => { const i = NODE_ORDER.indexOf(s); return i < 0 ? 99 : i; };
+// Trail ids are `sourceKey-from-to` (e.g. foot-sulin-vsetinska). A from→to pair can have
+// several source variants; variants[from][to] holds them all, routeId/routeWeight keep one
+// representative each so multi-hop Dijkstra still works.
 function buildRouteGraph() {
-  nodeName = {}; adj = {}; routeId = {}; routeWeight = {};
+  nodeName = {}; adj = {}; routeId = {}; routeWeight = {}; variants = {};
   for (const t of registry) {
-    const p = t.id.split('-'); if (p.length < 3) continue;   // ['mtb', from, to]
+    const p = t.id.split('-'); if (p.length < 3) continue;   // [sourceKey, from, to]
     const from = p[1], to = p[2], nm = t.name.split(' → ');
     nodeName[from] = nm[0] || from; nodeName[to] = nm[1] || to;
     (adj[from] = adj[from] || new Set()).add(to);
-    (routeId[from] = routeId[from] || {})[to] = t.id;
-    (routeWeight[from] = routeWeight[from] || {})[to] = t.km || 10;
+    const list = ((variants[from] = variants[from] || {})[to] = (variants[from][to] || []));
+    list.push(t);
+    // representative = shortest variant for this pair
+    if (routeWeight[from]?.[to] == null || (t.km || 10) < routeWeight[from][to]) {
+      (routeId[from] = routeId[from] || {})[to] = t.id;
+      (routeWeight[from] = routeWeight[from] || {})[to] = t.km || 10;
+    }
   }
+  // order each pair's variants by the PROFILE order, then by distance
+  const srcOrd = k => { const i = SOURCE_ORDER.indexOf(k); return i < 0 ? 99 : i; };
+  for (const a in variants) for (const b in variants[a])
+    variants[a][b].sort((x, y) => srcOrd(x.sourceKey) - srcOrd(y.sourceKey) || x.km - y.km);
 }
+const SOURCE_ORDER = ['foot', 'mtb', 'gravel', 'trek', 'short'];
 const opt = slug => '<option value="' + slug + '">' + escapeHtml(nodeName[slug]) + '</option>';
 function fillStart() { startSel.innerHTML = Object.keys(nodeName).sort((a, b) => ord(a) - ord(b)).map(opt).join(''); }
 function fillEnd(start) {
@@ -211,26 +224,106 @@ function stitchTrailSegments(segments) {
   };
 }
 
+// ---------- multi-source route selection (list + draw all) ----------
+let routeSet = [];            // [{ meta, trail|null }] candidate routes for the current pair
+let selectedRouteId = null;
+const loadTrail = id => trailCache[id]
+  ? Promise.resolve(trailCache[id])
+  : fetch('trails/' + id + '.json').then(r => r.json()).then(t => (trailCache[id] = t));
+
+function surfaceBar(surfaces) {
+  if (!surfaces || !surfaces.length) return '';
+  return '<span class="sfbar">' + surfaces.map(s =>
+    '<span class="sf sf-' + s.label.toLowerCase() + '" style="width:' + s.pct + '%" title="' + s.label + ' ' + s.pct + '%"></span>'
+  ).join('') + '</span>';
+}
+const surfaceText = surfaces => (surfaces || []).map(s => s.label + ' ' + s.pct + '%').join(' · ');
+
+function renderRouteList() {
+  const box = els.routeList;
+  if (routeSet.length < 1) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = '<div class="rt-hd">' + routeSet.length + ' route' + (routeSet.length > 1 ? 's' : '') + ' · tap to pick</div>'
+    + routeSet.map(r => {
+      const m = r.meta, sel = m.id === selectedRouteId;
+      return '<button type="button" class="rt' + (sel ? ' sel' : '') + '" data-id="' + m.id + '">'
+        + '<span class="rt-sw" style="background:' + (m.color || '#888') + '"></span>'
+        + '<span class="rt-main">'
+        + '<span class="rt-top"><b>' + escapeHtml(m.source || 'Route') + '</b>'
+        + '<span class="rt-stat">' + m.km + ' km · ↑' + m.asc + ' m</span></span>'
+        + surfaceBar(m.surfaces)
+        + (surfaceText(m.surfaces) ? '<span class="rt-surf">' + surfaceText(m.surfaces) + '</span>' : '')
+        + '</span></button>';
+    }).join('');
+  box.querySelectorAll('.rt').forEach(b => b.addEventListener('click', () => chooseRoute(b.dataset.id, false)));
+}
+
+function drawRoutes(fit) {
+  trailLayer.clearLayers();
+  // faint dashed line for every non-selected candidate
+  for (const r of routeSet) {
+    if (!r.trail || r.meta.id === selectedRouteId) continue;
+    L.polyline(r.trail.coords.map(c => [c[1], c[0]]), { color: r.meta.color || '#888', weight: 3, opacity: 0.45, dashArray: '3 6' })
+      .on('click', () => chooseRoute(r.meta.id, false)).addTo(trailLayer);
+  }
+  // bold selected line on top, with halo, popup and end markers
+  const sel = routeSet.find(r => r.meta.id === selectedRouteId);
+  if (sel && sel.trail) {
+    const t = sel.trail, line = t.coords.map(c => [c[1], c[0]]);
+    L.polyline(line, { color: '#fff', weight: 7, opacity: 0.6 }).addTo(trailLayer);
+    const elevTxt = (t.elevMin != null) ? '<br>' + Math.round(t.elevMin) + '–' + Math.round(t.elevMax) + ' m a.s.l.' : '';
+    const surf = surfaceText(t.surfaces) ? '<br>' + surfaceText(t.surfaces) : '';
+    L.polyline(line, { color: t.color, weight: 4, opacity: 0.97 })
+      .bindPopup('<b>' + escapeHtml(t.name) + '</b><br>' + (t.source ? escapeHtml(t.source) + ' · ' : '')
+        + t.km + ' km · ↑' + t.asc + ' m' + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ~' + t.min + ' min' + surf + elevTxt).addTo(trailLayer);
+    [['start', t.start], ['end', t.end]].forEach(([role, pt]) => {
+      if (!pt) return;
+      const el = pt.elev != null ? ' · ' + Math.round(pt.elev) + ' m' : '';
+      L.circleMarker([pt.lat, pt.lon], { radius: 6, color: '#fff', weight: 2, fillColor: role === 'start' ? '#16a34a' : '#ef4444', fillOpacity: 1 }).addTo(trailLayer);
+      L.marker([pt.lat - 0.0004, pt.lon], { icon: L.divIcon({ className: 'pin-label ' + role, html: escapeHtml(pt.name) + el, iconSize: null }) }).addTo(trailLayer);
+    });
+  }
+  if (fit && trailLayer.getLayers().length) { if (map.getBearing()) map.setBearing(0); map.fitBounds(trailLayer.getBounds().pad(0.12)); }
+}
+
+function chooseRoute(id, fit) {
+  const r = routeSet.find(x => x.meta.id === id); if (!r) return;
+  selectedRouteId = id;
+  const apply = t => {
+    activeTrail = t; drawRoutes(fit); buildElevation(t);
+    els.stL1.textContent = t.name;
+    els.stL2.textContent = (t.source ? t.source + ' · ' : '') + t.km + ' km · ↑' + t.asc + ' m'
+      + (surfaceText(t.surfaces) ? ' · ' + surfaceText(t.surfaces) : '');
+    loadWeatherFor(t); renderRouteList();
+  };
+  if (r.trail) apply(r.trail);
+  else loadTrail(r.meta.id).then(t => { r.trail = t; apply(t); }).catch(() => toast('Failed to load the route.'));
+}
+
 function selectRoute(start, end) {
   if (start === end) return;
-  const pathIds = findPath(start, end);
-  if (!pathIds.length) { toast('No route available.'); return; }
 
-  if (pathIds.length === 1) {
-    selectTrail(pathIds[0]);
+  // Direct pair with one or more source variants → list them all.
+  if (variants[start] && variants[start][end]) {
+    routeSet = variants[start][end].map(m => ({ meta: m, trail: trailCache[m.id] || null }));
+    if (!routeSet.some(r => r.meta.id === selectedRouteId)) selectedRouteId = routeSet[0].meta.id;
+    renderRouteList();
+    Promise.all(routeSet.map(r => r.trail ? Promise.resolve(r.trail) : loadTrail(r.meta.id).then(t => (r.trail = t))))
+      .then(() => chooseRoute(selectedRouteId, true))
+      .catch(() => toast('Failed to load routes.'));
     return;
   }
 
-  Promise.all(pathIds.map(id =>
-    trailCache[id] ? Promise.resolve(trailCache[id]) : fetch('trails/' + id + '.json').then(r => r.json()).then(t => (trailCache[id] = t))
-  )).then(segments => {
+  // No direct pair → stitch a multi-hop path into a single synthetic route.
+  const pathIds = findPath(start, end);
+  if (!pathIds.length) { toast('No route available.'); routeSet = []; renderRouteList(); trailLayer.clearLayers(); return; }
+  Promise.all(pathIds.map(loadTrail)).then(segments => {
     const stitched = stitchTrailSegments(segments);
-    activeTrail = stitched;
-    drawTrail(stitched);
-    buildElevation(stitched);
-    els.stL1.textContent = stitched.name;
-    els.stL2.textContent = stitched.region + ' · ' + stitched.km.toString() + ' km · ↑' + stitched.asc + ' m';
-    loadWeatherFor(stitched);
+    stitched.source = 'Route'; stitched.surfaces = [];
+    trailCache[stitched.id] = stitched;
+    routeSet = [{ meta: { id: stitched.id, source: 'Route', km: stitched.km, asc: stitched.asc, color: stitched.color, surfaces: [] }, trail: stitched }];
+    selectedRouteId = stitched.id;
+    chooseRoute(stitched.id, true);
   }).catch(() => toast('Failed to load route.'));
 }
 

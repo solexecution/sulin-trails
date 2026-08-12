@@ -1,5 +1,7 @@
-// Generates direct trail routes between all pairs of nodes in the network via BRouter (mtb, 3D).
-// Uses mountain trail via points to ensure routes strictly traverse mountain off-road tracks and avoid motor highways.
+// Generates trail routes between node pairs via BRouter, one route per "source"
+// (routing profile: footpath / bike / dirt-gravel / trekking / shortest). Each route
+// carries a surface breakdown (Path / Track / Paved / Unpaved) derived from the OSM
+// way tags BRouter returns, so the app can always show what a route is made of.
 // Usage: node gen-all.js (then: node build.js)
 
 const fs = require('fs');
@@ -20,35 +22,30 @@ const NODES = {
   lubovna:   { name: 'Ľubovniansky hrad',   lon: 20.6995470, lat: 49.3152240 },
 };
 
-// Mountain pass / off-road ridge waypoints to force routes off motor highways onto forest trails
-const VIAS = {
-  'lubovna-jarabina': [{ lon: 20.6780, lat: 49.3361 }],
-  'jarabina-lubovna': [{ lon: 20.6780, lat: 49.3361 }],
-  'jarabina-vsetinska': [{ lon: 20.6780, lat: 49.3361 }],
-  'vsetinska-jarabina': [{ lon: 20.6780, lat: 49.3361 }],
-  'lubovna-eliasovka': [{ lon: 20.6780, lat: 49.3361 }],
-  'eliasovka-lubovna': [{ lon: 20.6780, lat: 49.3361 }],
-  'vsetinska-eliasovka': [{ lon: 20.6780, lat: 49.3361 }],
-  'eliasovka-vsetinska': [{ lon: 20.6780, lat: 49.3361 }],
-  'sulin-jarabina': [{ lon: 20.7100, lat: 49.3750 }, { lon: 20.6780, lat: 49.3361 }],
-  'jarabina-sulin': [{ lon: 20.6780, lat: 49.3361 }, { lon: 20.7100, lat: 49.3750 }],
-  'sulin-lubovna': [{ lon: 20.7100, lat: 49.3750 }, { lon: 20.6780, lat: 49.3361 }],
-  'lubovna-sulin': [{ lon: 20.6780, lat: 49.3361 }, { lon: 20.7100, lat: 49.3750 }],
-  'sulin-vsetinska': [{ lon: 20.7100, lat: 49.3750 }],
-  'vsetinska-sulin': [{ lon: 20.7100, lat: 49.3750 }],
-  'sulin-nestville': [{ lon: 20.7100, lat: 49.3750 }],
-  'nestville-sulin': [{ lon: 20.7100, lat: 49.3750 }],
-  'sulin-ruzbachy': [{ lon: 20.7100, lat: 49.3750 }],
-  'ruzbachy-sulin': [{ lon: 20.7100, lat: 49.3750 }],
-  'sulin-lackova': [{ lon: 20.7100, lat: 49.3750 }],
-  'lackova-sulin': [{ lon: 20.7100, lat: 49.3750 }],
-};
-
-const COLORS = [
-  '#e65100', '#1565ff', '#6a1b9a', '#2e7d32', '#c62828', '#00838f',
-  '#455a64', '#ad1457', '#558b2f', '#4527a0', '#795548', '#d81b60',
-  '#00796b', '#f57c00', '#303f9f', '#5d4037', '#0288d1', '#8e24aa'
+// The trail network as an explicit list of edges. Add/remove a line to add/remove a
+// connection (both directions are generated). Optional `via` waypoints force a corridor.
+const EDGES = [
+  { from: 'sulin', to: 'vsetinska' },
 ];
+
+// Each "source" is one BRouter routing profile — it prefers a different kind of way,
+// so the same pair yields a footpath route, a bike route, a dirt-road route, etc.
+// `key` prefixes the trail id (key-from-to) and `color` styles its line on the map.
+const PROFILES = [
+  { key: 'foot',   label: 'Footpath',      profile: 'hiking-mountain', color: '#2e7d32' },
+  { key: 'mtb',    label: 'Bike trail',    profile: 'mtb',             color: '#1565c0' },
+  { key: 'gravel', label: 'Dirt / gravel', profile: 'gravel',          color: '#b45309' },
+  { key: 'trek',   label: 'Trekking',      profile: 'trekking',        color: '#6a1b9a' },
+  { key: 'short',  label: 'Shortest',      profile: 'shortest',        color: '#c62828' },
+];
+
+// Build the directed via-lookup from EDGES (forward + reversed) so brouter() can find it by key.
+const VIAS = {};
+for (const e of EDGES) {
+  const via = e.via || [];
+  VIAS[`${e.from}-${e.to}`] = via;
+  VIAS[`${e.to}-${e.from}`] = [...via].reverse();
+}
 
 const R = 6371000, rad = d => d * Math.PI / 180;
 const hav = (a, b) => {
@@ -67,16 +64,46 @@ function ascDesc(elev) {
   return { asc: Math.round(asc), desc: Math.round(desc) };
 }
 
+// ---- surface breakdown from BRouter's per-segment way tags --------------------
+const SURF_ORDER = ['Paved', 'Track', 'Path', 'Unpaved', 'Other'];
+function classifyWay(tags) {
+  const hw = (/highway=([^\s]+)/.exec(tags || '') || [])[1] || '';
+  const sf = (/surface=([^\s]+)/.exec(tags || '') || [])[1] || '';
+  if (/^(path|footway|bridleway|steps|pedestrian)$/.test(hw)) return 'Path';
+  if (/^(asphalt|paved|concrete|concrete:plates|paving_stones|sett|cobblestone|metal|wood)$/.test(sf)) return 'Paved';
+  if (hw === 'track') return 'Track';
+  if (/^(gravel|fine_gravel|compacted|pebblestone|unpaved|ground|dirt|earth|grass|sand|mud|rock|stone)$/.test(sf)) return 'Unpaved';
+  if (/^(motorway|trunk|primary|secondary|tertiary|residential|living_street|unclassified|service|road|cycleway)$/.test(hw)) return 'Paved';
+  return 'Other';
+}
+function surfaceBreakdown(messages) {
+  if (!Array.isArray(messages) || messages.length < 2) return [];
+  const head = messages[0];
+  const di = head.indexOf('Distance') >= 0 ? head.indexOf('Distance') : 3;
+  const wi = head.indexOf('WayTags') >= 0 ? head.indexOf('WayTags') : 9;
+  const tally = {}; let total = 0;
+  for (let i = 1; i < messages.length; i++) {
+    const m = Number(messages[i][di]) || 0;
+    const cat = classifyWay(messages[i][wi]);
+    tally[cat] = (tally[cat] || 0) + m; total += m;
+  }
+  if (!total) return [];
+  return SURF_ORDER.filter(c => tally[c])
+    .map(c => ({ label: c, pct: Math.round(tally[c] / total * 100) }))
+    .filter(s => s.pct > 0)
+    .sort((a, b) => b.pct - a.pct);
+}
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function brouter(aKey, bKey) {
+async function brouter(aKey, bKey, profile) {
   const a = NODES[aKey], b = NODES[bKey];
   const viaList = VIAS[`${aKey}-${bKey}`] || [];
   let pointsStr = `${a.lon},${a.lat}`;
   for (const v of viaList) pointsStr += `|${v.lon},${v.lat}`;
   pointsStr += `|${b.lon},${b.lat}`;
 
-  const url = `https://brouter.de/brouter?lonlats=${pointsStr}&profile=mtb&alternativeidx=0&format=geojson`;
+  const url = `https://brouter.de/brouter?lonlats=${pointsStr}&profile=${profile}&alternativeidx=0&format=geojson`;
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -84,7 +111,7 @@ async function brouter(aKey, bKey) {
       const t = await r.text();
       let j; try { j = JSON.parse(t); } catch { throw new Error(t.slice(0, 120)); }
       const f = j.features[0];
-      return { coords: f.geometry.coordinates, lengthM: Number(f.properties['track-length']) };
+      return { coords: f.geometry.coordinates, lengthM: Number(f.properties['track-length']), messages: f.properties.messages };
     } catch (e) {
       lastErr = e;
       await sleep(2000);
@@ -93,15 +120,19 @@ async function brouter(aKey, bKey) {
   throw lastErr;
 }
 
-function makeTrail(fromKey, toKey, coords, lengthM, color, asc, desc) {
+function makeTrail(fromKey, toKey, data, src) {
+  const { coords, lengthM, messages } = data;
   const elev = coords.map(c => c[2]);
+  const { asc, desc } = ascDesc(elev);
   const from = NODES[fromKey], to = NODES[toKey];
   const km = Math.round(lengthM / 100) / 10;
   const min = Math.round(lengthM / 13000 * 60 + asc / 8);
   return {
-    id: `mtb-${fromKey}-${toKey}`,
+    id: `${src.key}-${fromKey}-${toKey}`,
     name: `${from.name} → ${to.name}`,
-    region: REGION, type: 'mtb', color,
+    region: REGION, type: 'mtb',
+    source: src.label, sourceKey: src.key, color: src.color,
+    surfaces: surfaceBreakdown(messages),
     km, asc, desc, min,
     elevMin: Math.round(Math.min(...elev) * 10) / 10,
     elevMax: Math.round(Math.max(...elev) * 10) / 10,
@@ -112,34 +143,36 @@ function makeTrail(fromKey, toKey, coords, lengthM, color, asc, desc) {
 }
 
 (async () => {
-  const keys = Object.keys(NODES);
   let created = 0, failed = 0;
-  let colorIdx = 0;
 
-  for (let i = 0; i < keys.length; i++) {
-    for (let j = i + 1; j < keys.length; j++) {
-      const aKey = keys[i], bKey = keys[j];
-      const fwdFile = path.join(OUT, `mtb-${aKey}-${bKey}.json`);
-      const revFile = path.join(OUT, `mtb-${bKey}-${aKey}.json`);
-      const color = COLORS[colorIdx++ % COLORS.length];
+  for (const edge of EDGES) {
+    const aKey = edge.from, bKey = edge.to;
+    const seenLen = []; // dedup: two profiles sometimes return the identical path
 
-      console.log(`Generating off-road route ${aKey} ↔ ${bKey}...`);
+    for (const src of PROFILES) {
+      console.log(`Routing ${aKey} ↔ ${bKey} as ${src.label} (${src.profile})...`);
       try {
-        const fwdData = await brouter(aKey, bKey);
-        const fwdAscDesc = ascDesc(fwdData.coords.map(c => c[2]));
-        const fwd = makeTrail(aKey, bKey, fwdData.coords, fwdData.lengthM, color, fwdAscDesc.asc, fwdAscDesc.desc);
-        fs.writeFileSync(fwdFile, JSON.stringify(fwd));
+        const fwdData = await brouter(aKey, bKey, src.profile);
+        const roundedKm = Math.round(fwdData.lengthM / 100);
+        if (seenLen.includes(roundedKm)) {
+          console.log(`  – ${src.label} duplicates an earlier route (${fwdData.lengthM / 1000} km), skipped`);
+          continue;
+        }
+        seenLen.push(roundedKm);
 
-        const revData = await brouter(bKey, aKey);
-        const revAscDesc = ascDesc(revData.coords.map(c => c[2]));
-        const rev = makeTrail(bKey, aKey, revData.coords, revData.lengthM, color, revAscDesc.asc, revAscDesc.desc);
-        fs.writeFileSync(revFile, JSON.stringify(rev));
+        const fwd = makeTrail(aKey, bKey, fwdData, src);
+        fs.writeFileSync(path.join(OUT, `${fwd.id}.json`), JSON.stringify(fwd));
+
+        const revData = await brouter(bKey, aKey, src.profile);
+        const rev = makeTrail(bKey, aKey, revData, src);
+        fs.writeFileSync(path.join(OUT, `${rev.id}.json`), JSON.stringify(rev));
 
         created += 2;
-        console.log(`  ✓ Wrote mtb-${aKey}-${bKey} and mtb-${bKey}-${aKey} (${fwd.km} km)`);
+        const surf = fwd.surfaces.map(s => `${s.label} ${s.pct}%`).join(' · ');
+        console.log(`  ✓ ${fwd.id} + ${rev.id} — ${fwd.km} km · ${surf}`);
       } catch (e) {
         failed += 2;
-        console.warn(`  ✗ FAILED ${aKey} ↔ ${bKey}: ${e.message}`);
+        console.warn(`  ✗ FAILED ${aKey} ↔ ${bKey} ${src.label}: ${e.message}`);
       }
       await sleep(1200);
     }

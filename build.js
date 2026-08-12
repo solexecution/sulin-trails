@@ -8,7 +8,8 @@
 // Add a trail: drop a JSON in docs/trails/ (schema below), run `node build.js`.
 //
 // Trail schema:
-//   { id, name, region, type (mtb|hike|bike|walk), color, km, asc,
+//   { id (sourceKey-from-to), name, region, type (mtb|hike|bike|walk), color, km, asc,
+//     source (human label), sourceKey, surfaces:[{label,pct}],
 //     desc?, min, elevMin?, elevMax?,
 //     start:{name,lat,lon,elev?}, end:{name,lat,lon,elev?},
 //     coords:[[lon,lat,elev?],...], dist?:[cumulative metres] }
@@ -26,6 +27,7 @@ const registry = trailFiles.map(f => {
   if (t.id + '.json' !== f) console.warn(`  ! ${f}: id "${t.id}" does not match filename`);
   return {
     id: t.id, name: t.name, region: t.region, type: t.type, color: t.color,
+    source: t.source, sourceKey: t.sourceKey, surfaces: t.surfaces || [],
     km: t.km, asc: t.asc, desc: t.desc, min: t.min,
     elevMin: t.elevMin, elevMax: t.elevMax, hasElev: t.elevMin != null,
     points: t.coords.length,

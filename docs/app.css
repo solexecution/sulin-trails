@@ -149,6 +149,32 @@ body { font: 14px/1.45 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
   background-repeat: no-repeat; background-position: right 9px center;
 }
 
+/* ---- route list (source variants) ---- */
+.routelist { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.routelist[hidden] { display: none; }
+.rt-hd { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); padding: 2px 2px 1px; }
+.rt {
+  display: flex; align-items: stretch; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--sub); color: var(--ink);
+  padding: 7px 9px; font: inherit;
+}
+.rt:hover { background: var(--hover); }
+.rt.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--sub)); }
+.rt-sw { width: 4px; flex: none; border-radius: 3px; align-self: stretch; }
+.rt-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.rt-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.rt-top b { font-size: 13px; }
+.rt.sel .rt-top b { color: var(--accent); }
+.rt-stat { font-size: 11px; font-weight: 600; color: var(--muted); flex: none; }
+.sfbar { display: flex; height: 5px; border-radius: 3px; overflow: hidden; background: var(--line); }
+.sf { height: 100%; }
+.sf-paved { background: #9aa4b2; }
+.sf-track { background: #b98a4a; }
+.sf-path { background: #4f9e5a; }
+.sf-unpaved { background: #d08a3c; }
+.sf-other { background: #7c8698; }
+.rt-surf { font-size: 10.5px; color: var(--muted); line-height: 1.2; }
+
 /* ---------- option picker (opaque modal, replaces native <select> popups) ---------- */
 .pk-trigger {
   flex: 1; min-width: 0; text-align: left; cursor: pointer;
