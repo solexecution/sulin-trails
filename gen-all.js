@@ -28,6 +28,7 @@ const NODES = {
 const EDGES = [
   { from: 'sulin', to: 'vsetinska' },
   { from: 'staralubovna', to: 'lackova' },
+  { from: 'vsetinska', to: 'lackova' },
 ];
 
 // Each "source" is one BRouter routing profile — it prefers a different kind of way,
