@@ -119,12 +119,16 @@ function buildRouteGraph() {
       (routeWeight[from] = routeWeight[from] || {})[to] = t.km || 10;
     }
   }
-  // order each pair's variants by the PROFILE order, then by distance
+  // order each pair's variants most-off-road first: least paved %, then by
+  // profile preference (MTB/gravel/dirt over paths), then shortest. The first
+  // one is what the picker auto-selects, so the default avoids roads.
+  const pavedPct = t => { const s = (t.surfaces || []).find(x => x.label === 'Paved'); return s ? s.pct : 0; };
   const srcOrd = k => { const i = SOURCE_ORDER.indexOf(k); return i < 0 ? 99 : i; };
   for (const a in variants) for (const b in variants[a])
-    variants[a][b].sort((x, y) => srcOrd(x.sourceKey) - srcOrd(y.sourceKey) || x.km - y.km);
+    variants[a][b].sort((x, y) => pavedPct(x) - pavedPct(y) || srcOrd(x.sourceKey) - srcOrd(y.sourceKey) || x.km - y.km);
 }
-const SOURCE_ORDER = ['foot', 'mtb', 'gravel', 'trek', 'short'];
+// profile preference when two variants are equally paved — MTB/gravel/dirt ahead of paths and paved
+const SOURCE_ORDER = ['mtb', 'gravel', 'foot', 'trek', 'short'];
 const opt = slug => '<option value="' + slug + '">' + escapeHtml(nodeName[slug]) + '</option>';
 function fillStart() { startSel.innerHTML = Object.keys(nodeName).sort((a, b) => ord(a) - ord(b)).map(opt).join(''); }
 function fillEnd(start) {
