@@ -622,7 +622,9 @@ els.gps.addEventListener('click', () => {
   if (geoWatchId != null) navigator.geolocation.clearWatch(geoWatchId); // never stack two watches
   geoWatchId = navigator.geolocation.watchPosition(onPos, onGpsErr, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
   ensureAudio(); // user gesture: unlock beeps + speech for later pocket alerts
+  startKeepAlive(); // keep tracking + off-track alerts alive with the screen off
   acquireWake(); closePanel();
+  toast('Tracking will keep running with the screen off.', 4500);
 });
 
 function onPos(pos) {
@@ -681,6 +683,7 @@ function onGpsErr(err) {
     return;
   }
   els.gpsLbl.textContent = 'Start GPS'; els.gps.disabled = false; watching = false;
+  if (pocketOverlay.hidden) stopKeepAlive(); // tracking is dead and not in pocket mode — release audio
   announceGpsLost(err.code === 1 ? 'GPS LOST\nlocation denied' : 'GPS LOST\nno signal');
   toast(err.code === 1 ? 'Location access denied. Enable location and try again.' : 'GPS error: ' + err.message, 8000);
 }
@@ -772,6 +775,51 @@ function ensureAudio() {
   // warm speech synthesis inside the user gesture so later pocket announcements work
   try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch (e) { /* ignore */ }
 }
+
+// ---------- background keep-alive (run with the screen off) ----------
+// A foreground page is frozen when the screen locks, which stops GPS fixes and
+// the off-track watchdog. While media is *playing*, the browser keeps the tab
+// alive in the background — so we loop a silent clip for the whole GPS session.
+// Must be started from a user gesture (GPS-start / pocket), like any autoplay.
+let keepAudio = null, keepUrl = null;
+function silentWavUrl(seconds = 2, rate = 8000) {
+  const n = seconds * rate, buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+  const wr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  wr(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); wr(8, 'WAVE'); wr(12, 'fmt ');
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true);
+  dv.setUint16(34, 16, true); wr(36, 'data'); dv.setUint32(40, n * 2, true); // samples stay zero = silence
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+function startKeepAlive() {
+  try {
+    if (!keepAudio) {
+      keepUrl = silentWavUrl();
+      keepAudio = new Audio(keepUrl);
+      keepAudio.loop = true; keepAudio.volume = 0.02; // silent content; nonzero so it isn't culled as muted
+      keepAudio.setAttribute('playsinline', '');
+      // OS may pause it (audio-focus loss); resume while we're still navigating.
+      keepAudio.addEventListener('pause', () => { if (watching || !pocketOverlay.hidden) setTimeout(() => keepAudio.play().catch(() => {}), 400); });
+    }
+    keepAudio.play().catch(() => {});
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({ title: 'Sulín Trails', artist: 'Navigating — off-track alerts on' });
+        navigator.mediaSession.playbackState = 'playing';
+        navigator.mediaSession.setActionHandler('pause', () => {}); // ignore lock-screen pause so tracking continues
+        navigator.mediaSession.setActionHandler('play', () => { keepAudio && keepAudio.play().catch(() => {}); });
+      } catch (e) { /* ignore */ }
+    }
+  } catch (e) { /* ignore */ }
+}
+function stopKeepAlive() {
+  try { if (keepAudio) { keepAudio.pause(); keepAudio.currentTime = 0; } } catch (e) { /* ignore */ }
+  try { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none'; } catch (e) { /* ignore */ }
+}
+// If the OS throttled the clip while hidden, kick it back on return to foreground.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && keepAudio && (watching || !pocketOverlay.hidden)) keepAudio.play().catch(() => {});
+});
 function beep(freqs, dur, vol) {
   if (!audioCtx) return;
   // The context suspends after phone calls / audio-focus loss — resume, then play.
@@ -861,7 +909,7 @@ function openPocket() {
   if (!watching) pocketSetStatus('GPS is not running', true);
   // fullscreen hides Android's edge gestures (back swipe, notification shade pull)
   try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {}); } catch (e) { /* ignore */ }
-  acquireWake(); closePanel();
+  ensureAudio(); startKeepAlive(); acquireWake(); closePanel();
 }
 function closePocket() {
   pocketOverlay.hidden = true;
