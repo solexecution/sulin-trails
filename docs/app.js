@@ -249,6 +249,42 @@ function fmtDur(min) {
   return h ? '~' + h + 'h' + (m ? String(m).padStart(2, '0') : '') : '~' + m + ' min';
 }
 
+// ---------- incline (slope) colouring ----------
+// Slope % → colour: warm ramp for climbs (steeper = redder), green flat, cool
+// blue for descents. Shared by the map trail line and the elevation profile so
+// the two always read the same. Bands are ordered high→low.
+const GRADE_BANDS = [
+  { min: 15, color: '#7f1d1d', label: '≥15%' },   // brutal climb — pushing
+  { min: 10, color: '#dc2626', label: '10–15%' }, // steep
+  { min: 6,  color: '#f97316', label: '6–10%' },  // moderate
+  { min: 3,  color: '#eab308', label: '3–6%' },   // gentle climb
+  { min: -3, color: '#22c55e', label: 'flat' },   // flat / rolling
+  { min: -8, color: '#38bdf8', label: 'descent' },// gentle descent
+  { min: -Infinity, color: '#2563eb', label: '' },// steep descent
+];
+function gradeColor(pct) { for (const b of GRADE_BANDS) if (pct >= b.min) return b.color; return '#2563eb'; }
+// Signed grade % at point i, measured over a ~win-metre window so DEM noise
+// doesn't make the colour flicker point-to-point.
+function gradeAt(dist, elev, i, win) {
+  const N = dist.length; let a = i, b = i;
+  while (a > 0 && dist[i] - dist[a] < win / 2) a--;
+  while (b < N - 1 && dist[b] - dist[i] < win / 2) b++;
+  const dd = dist[b] - dist[a];
+  return dd > 0 ? (elev[b] - elev[a]) / dd * 100 : 0;
+}
+// Split the track into maximal runs of one colour band; adjacent runs share the
+// boundary index so drawn segments join up.
+function gradeRuns(dist, elev, win = 40) {
+  const N = dist.length, runs = []; let start = 0, cur = gradeColor(gradeAt(dist, elev, 0, win));
+  for (let i = 1; i < N; i++) {
+    const col = gradeColor(gradeAt(dist, elev, i, win));
+    if (col !== cur) { runs.push({ from: start, to: i, color: cur }); start = i; cur = col; }
+  }
+  runs.push({ from: start, to: N - 1, color: cur });
+  return runs;
+}
+function hasElev(t) { return t && t.coords && t.coords.length > 2 && t.coords[0].length > 2 && t.elevMin != null; }
+
 function surfaceBar(surfaces) {
   if (!surfaces || !surfaces.length) return '';
   return '<span class="sfbar">' + surfaces.map(s =>
@@ -291,9 +327,16 @@ function drawRoutes(fit) {
     L.polyline(line, { color: '#fff', weight: 7, opacity: 0.6 }).addTo(trailLayer);
     const elevTxt = (t.elevMin != null) ? '<br>' + Math.round(t.elevMin) + '–' + Math.round(t.elevMax) + ' m a.s.l.' : '';
     const surf = surfaceText(t.surfaces) ? '<br>' + surfaceText(t.surfaces) : '';
-    L.polyline(line, { color: t.color, weight: 4, opacity: 0.97 })
-      .bindPopup('<b>' + escapeHtml(t.name) + '</b><br>' + (t.source ? escapeHtml(t.source) + ' · ' : '')
-        + t.km + ' km · ↑' + t.asc + ' m' + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ' + fmtDur(t.min) + surf + elevTxt).addTo(trailLayer);
+    const popupHtml = '<b>' + escapeHtml(t.name) + '</b><br>' + (t.source ? escapeHtml(t.source) + ' · ' : '')
+      + t.km + ' km · ↑' + t.asc + ' m' + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ' + fmtDur(t.min) + surf + elevTxt;
+    if (hasElev(t)) {
+      // colour the line by slope, one polyline per grade-band run
+      for (const run of gradeRuns(t.dist, t.coords.map(c => c[2])))
+        L.polyline(line.slice(run.from, run.to + 1), { color: run.color, weight: 4, opacity: 0.98 })
+          .bindPopup(popupHtml).addTo(trailLayer);
+    } else {
+      L.polyline(line, { color: t.color, weight: 4, opacity: 0.97 }).bindPopup(popupHtml).addTo(trailLayer);
+    }
     [['start', t.start], ['end', t.end]].forEach(([role, pt]) => {
       if (!pt) return;
       const el = pt.elev != null ? ' · ' + Math.round(pt.elev) + ' m' : '';
@@ -463,9 +506,17 @@ function buildElevation(t) {
   const xOf = i => pad.l + (dist[i] / totalM) * iW;
   const yOf = e => pad.t + (1 - (e - eMin) / Math.max(1, eMax - eMin)) * iH;
 
-  let path = '';
-  for (let i = 0; i < N; i++) path += (i ? 'L' : 'M') + xOf(i).toFixed(1) + ',' + yOf(elev[i]).toFixed(1);
-  const area = path + 'L' + xOf(N - 1).toFixed(1) + ',' + (pad.t + iH) + 'L' + xOf(0).toFixed(1) + ',' + (pad.t + iH) + 'Z';
+  // slope-coloured profile: one filled slab + top stroke per grade-band run,
+  // so the incline reads straight off the colour (matches the map line).
+  const baseY = pad.t + iH;
+  let slopeSvg = '';
+  for (const run of gradeRuns(dist, elev)) {
+    let top = '';
+    for (let i = run.from; i <= run.to; i++) top += (i === run.from ? 'M' : 'L') + xOf(i).toFixed(1) + ',' + yOf(elev[i]).toFixed(1);
+    const poly = top + 'L' + xOf(run.to).toFixed(1) + ',' + baseY + 'L' + xOf(run.from).toFixed(1) + ',' + baseY + 'Z';
+    slopeSvg += '<path d="' + poly + '" fill="' + run.color + '" fill-opacity="0.42" stroke="none"/>'
+      + '<path d="' + top + '" fill="none" stroke="' + run.color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+  }
 
   let ticks = '';
   [eMin, (eMin + eMax) / 2, eMax].map(Math.round).forEach(tk => {
@@ -478,10 +529,10 @@ function buildElevation(t) {
     ticks += '<text class="tick" x="' + (pad.l + (k * 1000 / totalM) * iW) + '" y="' + (H - 4) + '" text-anchor="middle">' + k + '</text>';
   ticks += '<text class="tick" x="' + (W - pad.r) + '" y="' + (H - 4) + '" text-anchor="end">km</text>';
 
-  elevSvg.innerHTML = ticks
-    + '<path class="area" d="' + area + '"/><path class="line" d="' + path + '"/>'
+  elevSvg.innerHTML = ticks + slopeSvg
     + '<line class="cross" id="elevCross" x1="0" y1="' + pad.t + '" x2="0" y2="' + (pad.t + iH) + '"/>'
     + '<circle class="cdot" id="elevDot" r="4"/><circle class="gpsdot" id="elevGps" r="5"/>';
+  buildGradeLegend();
 
   const cross = $('elevCross'), dot = $('elevDot');
   elevState = { dist, elev, xOf, yOf, N, gps: $('elevGps') };
@@ -498,9 +549,9 @@ function buildElevation(t) {
     const x = xOf(i), y = yOf(elev[i]);
     cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('opacity', 1);
     dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('opacity', 1);
-    const grade = i > 0 ? (elev[i] - elev[i - 1]) / Math.max(1, dist[i] - dist[i - 1]) * 100 : 0;
+    const grade = gradeAt(dist, elev, i, 40);
     read.innerHTML = '<b>' + Math.round(elev[i]) + ' m a.s.l.</b> · ' + (dist[i] / 1000).toFixed(2)
-      + ' km <span>· grade ' + (grade >= 0 ? '+' : '') + grade.toFixed(1) + ' %</span>';
+      + ' km <span>· grade </span><b style="color:' + gradeColor(grade) + '">' + (grade >= 0 ? '+' : '') + grade.toFixed(1) + ' %</b>';
     const c = activeTrail.coords[i];
     hoverMarker.setLatLng([c[1], c[0]]); if (!map.hasLayer(hoverMarker)) hoverMarker.addTo(map);
   }
@@ -512,6 +563,13 @@ function buildElevation(t) {
   elevSvg.onpointermove = e => { e.preventDefault(); showAt(nearestIdx(e.clientX)); };
   elevSvg.onpointerdown = e => showAt(nearestIdx(e.clientX));
   elevSvg.onpointerleave = hideHover;
+}
+// One-time colour legend under the profile (steep climb → flat → descent).
+function buildGradeLegend() {
+  const el = $('elevLegend'); if (!el || el.dataset.built) return;
+  el.innerHTML = GRADE_BANDS.filter(b => b.label).map(b =>
+    '<span class="lg"><i style="background:' + b.color + '"></i>' + b.label + '</span>').join('');
+  el.dataset.built = '1';
 }
 const hoverMarker = L.circleMarker([0, 0], { radius: 6, color: '#fff', weight: 2, fillColor: '#2e7d32', fillOpacity: 1, interactive: false });
 

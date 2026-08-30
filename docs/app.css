@@ -253,6 +253,9 @@ body { font: 14px/1.45 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
 #elevSvg .cross { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 2; opacity: 0; }
 #elevSvg .cdot { fill: var(--accent); stroke: #fff; stroke-width: 1.5; opacity: 0; }
 #elevSvg .gpsdot { fill: var(--user); stroke: #fff; stroke-width: 1.5; opacity: 0; }
+#elevLegend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 5px; }
+#elevLegend .lg { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#elevLegend .lg i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 
 /* ---------- toast ---------- */
 #toast {
