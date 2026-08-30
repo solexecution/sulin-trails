@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { rideMinutes } = require('./pace');
 
 const OUT = path.join(__dirname, 'docs', 'trails');
 const REGION = 'Ľubovnianska vrchovina';
@@ -130,9 +131,9 @@ function makeTrail(fromKey, toKey, data, src) {
   const { asc, desc } = ascDesc(elev);
   const from = NODES[fromKey], to = NODES[toKey];
   const km = Math.round(lengthM / 100) / 10;
-  // Family MTB pace — riding with kids on these track/gravel trails: ~9 km/h on
-  // the flat, plus climbing time (kids climb ~360 m of ascent per hour → asc/6 min).
-  const min = Math.round(lengthM / 9000 * 60 + asc / 6);
+  // Gradient-aware family-MTB time from the elevation profile (see pace.js):
+  // climbs are ridden/pushed slowly, descents capped for safety with kids.
+  const min = rideMinutes(coords, cumDist(coords));
   return {
     id: `${src.key}-${fromKey}-${toKey}`,
     name: `${from.name} → ${to.name}`,
