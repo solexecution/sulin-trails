@@ -241,6 +241,14 @@ const loadTrail = id => trailCache[id]
   ? Promise.resolve(trailCache[id])
   : fetch('trails/' + id + '.json').then(r => r.json()).then(t => (trailCache[id] = t));
 
+// Ride time riding with kids (see gen-all.js for the pace model). Shown as
+// "~2h30" / "~45 min" so long family rides read at a glance.
+function fmtDur(min) {
+  if (min == null) return '';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? '~' + h + 'h' + (m ? String(m).padStart(2, '0') : '') : '~' + m + ' min';
+}
+
 function surfaceBar(surfaces) {
   if (!surfaces || !surfaces.length) return '';
   return '<span class="sfbar">' + surfaces.map(s =>
@@ -260,7 +268,7 @@ function renderRouteList() {
         + '<span class="rt-sw" style="background:' + (m.color || '#888') + '"></span>'
         + '<span class="rt-main">'
         + '<span class="rt-top"><b>' + escapeHtml(m.source || 'Route') + '</b>'
-        + '<span class="rt-stat">' + m.km + ' km · ↑' + m.asc + ' m</span></span>'
+        + '<span class="rt-stat">' + m.km + ' km · ↑' + m.asc + ' m' + (m.min != null ? ' · ' + fmtDur(m.min) : '') + '</span></span>'
         + surfaceBar(m.surfaces)
         + (surfaceText(m.surfaces) ? '<span class="rt-surf">' + surfaceText(m.surfaces) + '</span>' : '')
         + '</span></button>';
@@ -285,7 +293,7 @@ function drawRoutes(fit) {
     const surf = surfaceText(t.surfaces) ? '<br>' + surfaceText(t.surfaces) : '';
     L.polyline(line, { color: t.color, weight: 4, opacity: 0.97 })
       .bindPopup('<b>' + escapeHtml(t.name) + '</b><br>' + (t.source ? escapeHtml(t.source) + ' · ' : '')
-        + t.km + ' km · ↑' + t.asc + ' m' + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ~' + t.min + ' min' + surf + elevTxt).addTo(trailLayer);
+        + t.km + ' km · ↑' + t.asc + ' m' + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ' + fmtDur(t.min) + surf + elevTxt).addTo(trailLayer);
     [['start', t.start], ['end', t.end]].forEach(([role, pt]) => {
       if (!pt) return;
       const el = pt.elev != null ? ' · ' + Math.round(pt.elev) + ' m' : '';
@@ -304,6 +312,7 @@ function chooseRoute(id, fit) {
     activeTrail = t; drawRoutes(fit); buildElevation(t);
     els.stL1.textContent = t.name;
     els.stL2.textContent = (t.source ? t.source + ' · ' : '') + t.km + ' km · ↑' + t.asc + ' m'
+      + (t.min != null ? ' · ' + fmtDur(t.min) : '')
       + (surfaceText(t.surfaces) ? ' · ' + surfaceText(t.surfaces) : '');
     loadWeatherFor(t); renderRouteList();
   };
@@ -417,7 +426,7 @@ function drawTrail(t) {
   const elevTxt = (t.elevMin != null) ? '<br>' + Math.round(t.elevMin) + '–' + Math.round(t.elevMax) + ' m a.s.l.' : '';
   L.polyline(line, { color: t.color, weight: 4, opacity: 0.97 })
     .bindPopup('<b>' + escapeHtml(t.name) + '</b><br>' + t.region + '<br>'
-      + t.km.toString() + ' km · ↑' + t.asc + ' m' + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ~' + t.min + ' min' + elevTxt).addTo(trailLayer);
+      + t.km.toString() + ' km · ↑' + t.asc + ' m' + (t.desc != null ? ' · ↓' + t.desc + ' m' : '') + ' · ' + fmtDur(t.min) + elevTxt).addTo(trailLayer);
   [['start', t.start], ['end', t.end]].forEach(([role, pt]) => {
     if (!pt) return;
     const el = pt.elev != null ? ' · ' + Math.round(pt.elev) + ' m' : '';

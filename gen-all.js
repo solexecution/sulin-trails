@@ -130,7 +130,9 @@ function makeTrail(fromKey, toKey, data, src) {
   const { asc, desc } = ascDesc(elev);
   const from = NODES[fromKey], to = NODES[toKey];
   const km = Math.round(lengthM / 100) / 10;
-  const min = Math.round(lengthM / 13000 * 60 + asc / 8);
+  // Family MTB pace — riding with kids on these track/gravel trails: ~9 km/h on
+  // the flat, plus climbing time (kids climb ~360 m of ascent per hour → asc/6 min).
+  const min = Math.round(lengthM / 9000 * 60 + asc / 6);
   return {
     id: `${src.key}-${fromKey}-${toKey}`,
     name: `${from.name} → ${to.name}`,
