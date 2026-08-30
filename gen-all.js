@@ -20,12 +20,14 @@ const NODES = {
   jarabina:  { name: 'Jarabina',            lon: 20.6560470, lat: 49.3382840 },
   eliasovka: { name: 'Eliášovka 1023',      lon: 20.6425770, lat: 49.4008280 },
   lubovna:   { name: 'Ľubovniansky hrad',   lon: 20.6995470, lat: 49.3152240 },
+  staralubovna: { name: 'Stará Ľubovňa',    lon: 20.6888700, lat: 49.2985700 },
 };
 
 // The trail network as an explicit list of edges. Add/remove a line to add/remove a
 // connection (both directions are generated). Optional `via` waypoints force a corridor.
 const EDGES = [
   { from: 'sulin', to: 'vsetinska' },
+  { from: 'staralubovna', to: 'lackova' },
 ];
 
 // Each "source" is one BRouter routing profile — it prefers a different kind of way,
